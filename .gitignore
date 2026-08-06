@@ -1,0 +1,47 @@
+## .NET
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.userprefs
+packages/
+*.nupkg
+
+## Visual Studio
+.vs/
+*.sln.ide/
+
+## VS Code
+.vscode/
+
+## Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+
+## OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+## Environment
+.env
+*.env.local
+appsettings.*.local.json
+
+## Logs
+*.log
+logs/
+
+## Temp
+tmp/
+temp/
+*.tmp
+*.swp
+*.swo
+*~

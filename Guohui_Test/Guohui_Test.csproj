@@ -1,0 +1,43 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="SqlSugarCore" Version="5.1.4.216" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\GuoHui_Data\GuoHui_Data.csproj" />
+    <ProjectReference Include="..\Guohui_Wcs\Guohui_Wcs.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="8.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="8.0.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="appsettings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="Kingdee.CDP.WebApi.SDK">
+      <HintPath>E:\SDK_.Net6.0_V8.2.0\SDK_.Net6.0_V8.2.0\.net6.0_sdk_v8.2.0\Kingdee.CDP.WebApi.SDK.Net6.0.V8.2.0\Kingdee.CDP.WebApi.SDK.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+</Project>
+
+
