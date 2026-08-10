@@ -30,7 +30,7 @@ namespace GuoHui_Data.DaoEntity
                 .AddJsonFile("appsettings.json", optional: true)
                 .Build();
             return config.GetConnectionString("Default")
-                ?? "Server=tcp:.;Database=GuoHui_Wcs;User Id=sa;Password=telenadmin99.;TrustServerCertificate=True;Connection Timeout=30;"  ;
+                ?? "Server=tcp:191.167.10.66;Database=GuoHui_Wcs;User Id=sa;Password=telenadmin99.;TrustServerCertificate=True;Connection Timeout=30;"  ;
         }
 
         private static SqlSugarScope CreateDb()

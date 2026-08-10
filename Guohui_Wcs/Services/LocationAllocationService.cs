@@ -140,15 +140,12 @@ public class LocationAllocationService
         return allocationResult;
     }
 
-    public async Task<AllocationResult> AllocateToSpecific(string locationCode, AllocationRequest request)
-    {
-        if (request.MaterNo == null || request.MaterNo.Count == 0)
-            return Fail("物料号不能为空");
-
+   public async Task<AllocationResult> AllocateToSpecific(string locationCode, AllocationRequest request)
+   {
         var pallNo = GeneratePallNo();
 
         var loc = _db.Queryable<Location>()
-            .First(l => l.LocationCode == locationCode);
+            .First(l => l.Reserve5 == locationCode);
 
         if (loc == null)
             return Fail("终点库位不存在");
@@ -156,56 +153,70 @@ public class LocationAllocationService
             return Fail("终点库位已被占用");
         if (loc.EnableFlag == false)
             return Fail("终点库位已禁用");
-        if (loc.LocationType == "地面库位")
-            return Fail("地面中转库位，不可用于存储分配");
 
-        decimal totalWeight = 0;
-        var syncedBarcodes = new List<Barcode>();
+        // G 开头：出库操作，不校验物料号，重量为 0
+        bool isGLocation = locationCode.StartsWith("G", StringComparison.OrdinalIgnoreCase);
 
-        foreach (var code in request.MaterNo)
+        if (!isGLocation)
         {
-            var wmsResult = await _apiClient.SyncBardossierToDbAsync(code);
-            if (wmsResult != null)
+            if (request.MaterNo == null || request.MaterNo.Count == 0)
+                return Fail("物料号不能为空");
+
+            decimal totalWeight = 0;
+            var syncedBarcodes = new List<Barcode>();
+
+            foreach (var code in request.MaterNo)
             {
-                syncedBarcodes.Add(wmsResult);
-                totalWeight += wmsResult.Qty;
+                var wmsResult = await _apiClient.SyncBardossierToDbAsync(code);
+                if (wmsResult != null)
+                {
+                    syncedBarcodes.Add(wmsResult);
+                    totalWeight += wmsResult.Qty;
+                }
             }
-        }
 
-        if (totalWeight == 0)
-            return Fail("WMS 未返回任何物料重量，请检查物料码");
+            if (totalWeight == 0)
+                return Fail("WMS 未返回任何物料重量，请检查物料码");
 
-        var pallMater = new PallMater
-        {
-            PallNo = pallNo,
-            Weight = totalWeight,
-            LocationCode = locationCode,
-            ShelfCode = request.StartPoint,
-            CreateTime = DateTime.Now
-        };
-
-        for (int i = 0; i < syncedBarcodes.Count && i < 6; i++)
-        {
-            var bc = syncedBarcodes[i];
-            switch (i)
+            var pallMater = new PallMater
             {
-                case 0: pallMater.SubTitle1 = bc.Number; pallMater.Weigh1 = bc.Qty; break;
-                case 1: pallMater.SubTitle2 = bc.Number; pallMater.Weigh2 = bc.Qty; break;
-                case 2: pallMater.SubTitle3 = bc.Number; pallMater.Weigh3 = bc.Qty; break;
-                case 3: pallMater.SubTitle4 = bc.Number; pallMater.Weigh4 = bc.Qty; break;
-                case 4: pallMater.SubTitle5 = bc.Number; pallMater.Weigh5 = bc.Qty; break;
-                case 5: pallMater.SubTitle6 = bc.Number; pallMater.Weigh6 = bc.Qty; break;
+                PallNo = pallNo,
+                Weight = totalWeight,
+                LocationCode = loc.LocationCode,
+                ShelfCode = request.StartPoint,
+                CreateTime = DateTime.Now
+            };
+
+            for (int i = 0; i < syncedBarcodes.Count && i < 6; i++)
+            {
+                var bc = syncedBarcodes[i];
+                switch (i)
+                {
+                    case 0: pallMater.SubTitle1 = bc.Number; pallMater.Weigh1 = bc.Qty; break;
+                    case 1: pallMater.SubTitle2 = bc.Number; pallMater.Weigh2 = bc.Qty; break;
+                    case 2: pallMater.SubTitle3 = bc.Number; pallMater.Weigh3 = bc.Qty; break;
+                    case 3: pallMater.SubTitle4 = bc.Number; pallMater.Weigh4 = bc.Qty; break;
+                    case 4: pallMater.SubTitle5 = bc.Number; pallMater.Weigh5 = bc.Qty; break;
+                    case 5: pallMater.SubTitle6 = bc.Number; pallMater.Weigh6 = bc.Qty; break;
+                }
             }
+
+            _db.Insertable(pallMater).ExecuteCommand();
+            _logger.LogInformation("PallMater created: {PallNo}, weight: {Weight}, from: {Start}, to: {End}",
+                pallNo, totalWeight, request.StartPoint, locationCode);
+
+            if (!CanPlace(loc, totalWeight))
+                return Fail("所在货架对已超重限制");
+
+            return TryAllocate(loc, pallNo, totalWeight);
         }
-
-        _db.Insertable(pallMater).ExecuteCommand();
-        _logger.LogInformation("PallMater created: {PallNo}, weight: {Weight}, from: {Start}, to: {End}",
-            pallNo, totalWeight, request.StartPoint, locationCode);
-
-        if (!CanPlace(loc, totalWeight))
-            return Fail("所在货架对已超重限制");
-
-        return TryAllocate(loc, pallNo, totalWeight);
+        else
+        {
+            decimal totalWeight = 0;
+            _logger.LogInformation("Outlocate {PallNo}, weight: {Weight}, from: {Start}, to: {End}",
+                pallNo, totalWeight, request.StartPoint, locationCode);
+            return TryAllocate(loc, pallNo, totalWeight);
+        }
     }
     public AllocationResult Release(string locationCode)
     {

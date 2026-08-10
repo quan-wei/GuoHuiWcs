@@ -1,6 +1,8 @@
+ï»¿using GuoHui_Data.DaoEntity;
 using Guohui_Wcs.Helper.AgvOrderHleper;
 using Guohui_Wcs.Services;
 using Microsoft.AspNetCore.Mvc;
+using Models;
 
 namespace Guohui_Wcs.Controllers;
 
@@ -23,18 +25,20 @@ public class LocationController : ControllerBase
         var result = await _allocationService.Allocate(request);
         if (!result.Success)
             return BadRequest(result);
+        var point =Model_Data.Db.Queryable<Location>().Where(l => l.Reserve5 == request.StartPoint).First();
 
-        var target = new List<string> { request.StartPoint!, result.LocationCode! };
+        var target = new List<string> { point.LocationCode!, result.LocationCode! };
         var agvResult = aGVOrder.CreateTask(target);
 
         if (agvResult == null || agvResult.code != "0")
         {
             _allocationService.RollbackAllocation(result.LocationCode!, result.PallNo!);
-            var errMsg = agvResult?.message ?? "AGVÏµÍ³ÎŞÏìÓ¦";
-            _logger.LogError("AGVÈÎÎñ´´½¨Ê§°Ü: {Message}, ÒÑ»Ø¹ö¿âÎ» {Location}", errMsg, result.LocationCode);
-            return BadRequest(new { Success = false, Message = $"AGV°áÔËÈÎÎñ´´½¨Ê§°Ü: {errMsg}" });
+            var errMsg = agvResult?.message ?? "AGVç³»ç»Ÿæ— å“åº”";
+            _logger.LogError("AGVä»»åŠ¡åˆ›å»ºå¤±è´¥: {Message}, å·²å›æ»šåº“ä½ {Location}", errMsg, result.LocationCode);
+            return BadRequest(new { Success = false, Message = $"AGVæ¬è¿ä»»åŠ¡åˆ›å»ºå¤±è´¥: {errMsg}" });
         }
 
+        _allocationService.Release(point.LocationCode!);
         return Ok(result);
     }
 
@@ -45,20 +49,21 @@ public class LocationController : ControllerBase
         if (!result.Success)
             return BadRequest(result);
 
-        var target = new List<string> { request.StartPoint!, result.LocationCode! };
+        var startPoint = Model_Data.Db.Queryable<Location>().Where(l => l.Reserve5 == request.StartPoint).First();
+        var target = new List<string> { startPoint.LocationCode!, result.LocationCode! };
         var agvResult = aGVOrder.CreateTask(target);
 
         if (agvResult == null || agvResult.code != "0")
         {
             _allocationService.RollbackAllocation(result.LocationCode!, result.PallNo!);
-            var errMsg = agvResult?.message ?? "AGVÏµÍ³ÎŞÏìÓ¦";
-            _logger.LogError("AGVÈÎÎñ´´½¨Ê§°Ü: {Message}, ÒÑ»Ø¹ö¿âÎ» {Location}", errMsg, result.LocationCode);
-            return BadRequest(new { Success = false, Message = $"AGV°áÔËÈÎÎñ´´½¨Ê§°Ü: {errMsg}" });
+            var errMsg = agvResult?.message ?? "AGVç³»ç»Ÿæ— å“åº”";
+            _logger.LogError("AGVä»»åŠ¡åˆ›å»ºå¤±è´¥: {Message}, å·²å›æ»šåº“ä½ {Location}", errMsg, result.LocationCode);
+            return BadRequest(new { Success = false, Message = $"AGVæ¬è¿ä»»åŠ¡åˆ›å»ºå¤±è´¥: {errMsg}" });
         }
 
+        _allocationService.Release(startPoint.LocationCode!);
         return Ok(result);
     }
-
     [HttpPost("release/{locationCode}")]
     public IActionResult Release(string locationCode)
     {
