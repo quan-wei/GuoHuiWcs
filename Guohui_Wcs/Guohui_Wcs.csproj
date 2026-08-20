@@ -4,18 +4,14 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <GenerateTargetFrameworkAttribute>false</GenerateTargetFrameworkAttribute>
   </PropertyGroup>
 
   <ItemGroup>
     <PackageReference Include="NLog" Version="6.1.4" />
     <PackageReference Include="SqlSugarCore" Version="5.1.4.216" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.6.2" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Reference Include="Kingdee.CDP.WebApi.SDK">
-      <HintPath>..\..\SDK_.Net6.0_V8.2.0\SDK_.Net6.0_V8.2.0\.net6.0_sdk_v8.2.0\Kingdee.CDP.WebApi.SDK.Net6.0.V8.2.0\Kingdee.CDP.WebApi.SDK.dll</HintPath>
-    </Reference>
   </ItemGroup>
 
   <ItemGroup>
@@ -27,5 +23,3 @@
   </ItemGroup>
 
 </Project>
-
-

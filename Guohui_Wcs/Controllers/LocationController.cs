@@ -1,8 +1,10 @@
 ﻿using GuoHui_Data.DaoEntity;
 using Guohui_Wcs.Helper.AgvOrderHleper;
+using Guohui_Wcs.Models.Kingdee;
 using Guohui_Wcs.Services;
 using Microsoft.AspNetCore.Mvc;
 using Models;
+using System.Drawing;
 
 namespace Guohui_Wcs.Controllers;
 
@@ -10,12 +12,21 @@ namespace Guohui_Wcs.Controllers;
 [Route("api/[controller]")]
 public class LocationController : ControllerBase
 {
+    public class locks
+    {
+        public string? Reason {  get; set; }
+    }
     private readonly LocationAllocationService _allocationService;
+    private readonly KingdeeApiService _kingdeeApi;
+    private readonly DeliveryOrderService _deliveryService;
     private readonly ILogger<LocationController> _logger;
     AGVOrderHelper aGVOrder= new AGVOrderHelper("191.167.10.5:8181");
-    public LocationController(LocationAllocationService allocationService, ILogger<LocationController> logger)
+
+    public LocationController(LocationAllocationService allocationService, KingdeeApiService kingdeeApi, DeliveryOrderService deliveryService, ILogger<LocationController> logger)
     {
         _allocationService = allocationService;
+        _kingdeeApi = kingdeeApi;
+        _deliveryService = deliveryService;
         _logger = logger;
     }
 
@@ -28,17 +39,29 @@ public class LocationController : ControllerBase
         var point =Model_Data.Db.Queryable<Location>().Where(l => l.Reserve5 == request.StartPoint).First();
 
         var target = new List<string> { point.LocationCode!, result.LocationCode! };
-        var agvResult = aGVOrder.CreateTask(target);
+        string taskcode=Guid.NewGuid().ToString("N");
+        queues queues = new queues()
+        {
+            TaskName = taskcode,
+            PallNo = result.PallNo,
+            Type = "入库",
+            GetLocation = point.LocationCode,
+            PutLocation = result.LocationCode,
+            Status = "0",
+            CreateTime = DateTime.Now
+        };
+        Model_Data.Db.Insertable(queues).ExecuteCommand();
+        var agvResult = aGVOrder.CreateTask(target, taskcode);
 
-        if (agvResult == null || agvResult.code != "0")
+        if (agvResult == null || agvResult.Code != "0")
         {
             _allocationService.RollbackAllocation(result.LocationCode!, result.PallNo!);
-            var errMsg = agvResult?.message ?? "AGV系统无响应";
+            var errMsg = agvResult?.Message ?? "AGV系统无响应";
             _logger.LogError("AGV任务创建失败: {Message}, 已回滚库位 {Location}", errMsg, result.LocationCode);
             return BadRequest(new { Success = false, Message = $"AGV搬运任务创建失败: {errMsg}" });
         }
 
-        _allocationService.Release(point.LocationCode!);
+        _allocationService.Release(point.Reserve5!);
         return Ok(result);
     }
 
@@ -51,19 +74,32 @@ public class LocationController : ControllerBase
 
         var startPoint = Model_Data.Db.Queryable<Location>().Where(l => l.Reserve5 == request.StartPoint).First();
         var target = new List<string> { startPoint.LocationCode!, result.LocationCode! };
-        var agvResult = aGVOrder.CreateTask(target);
+        string taskcode = Guid.NewGuid().ToString("N");
+        queues queues = new queues()
+        {
+            TaskName = taskcode,
+            PallNo = result.PallNo,
+            Type = "入库",
+            GetLocation = startPoint.LocationCode,
+            PutLocation = locationCode,
+            Status = "0",
+            CreateTime = DateTime.Now
+        };
+        Model_Data.Db.Insertable(queues).ExecuteCommand();
+        var agvResult = aGVOrder.CreateTask(target, taskcode);
 
-        if (agvResult == null || agvResult.code != "0")
+        if (agvResult == null || agvResult.Code != "0")
         {
             _allocationService.RollbackAllocation(result.LocationCode!, result.PallNo!);
-            var errMsg = agvResult?.message ?? "AGV系统无响应";
+            var errMsg = agvResult?.Message ?? "AGV系统无响应";
             _logger.LogError("AGV任务创建失败: {Message}, 已回滚库位 {Location}", errMsg, result.LocationCode);
             return BadRequest(new { Success = false, Message = $"AGV搬运任务创建失败: {errMsg}" });
         }
 
-        _allocationService.Release(startPoint.LocationCode!);
+        _allocationService.Release(startPoint.Reserve5!);
         return Ok(result);
     }
+
     [HttpPost("release/{locationCode}")]
     public IActionResult Release(string locationCode)
     {
@@ -73,10 +109,143 @@ public class LocationController : ControllerBase
         return BadRequest(result);
     }
 
+    [HttpPost("lock/{locationCode}")]
+    public IActionResult Lock(string locationCode, [FromBody] locks locks)
+    {
+        var loc = Model_Data.Db.Queryable<Location>()
+            .Where(l => l.Reserve5 == locationCode)
+            .First();
+        Console.WriteLine(locks.Reason);
+        if (loc == null)
+            return BadRequest(new { Success = false, Message = "库位不存在" });
+
+        var rows = Model_Data.Db.Updateable<Location>()
+            .SetColumns(l => new Location
+            {
+                Status = 1,
+                UpdateTime = DateTime.Now
+            })
+            .Where(l => l.Reserve5 == locationCode)
+            .ExecuteCommand();
+
+        return rows > 0
+            ? Ok(new { Success = true, Message = "库位已锁定" })
+            : BadRequest(new { Success = false, Message = "库位锁定失败" });
+    }
+
     [HttpGet("group-load/{shelfCode}")]
     public IActionResult GetGroupLoad(string shelfCode)
     {
         var info = _allocationService.GetGroupLoad(shelfCode);
         return Ok(info);
+    }
+
+   [HttpGet("query-delivery/{number}")]
+   public async Task<IActionResult> QueryDeliveryNotice(string number)
+   {
+       var response = await _kingdeeApi.ViewAsync<KingdeeDeliveryNotice>("SAL_DELIVERYNOTICE", number);
+       if (response == null || !response.Result.ResponseStatus.IsSuccess)
+           return BadRequest(new { Success = false, Message = "金蝶查询失败，请检查单据号或登录配置" });
+
+       var notice = response.Result.Data!;
+       return Ok(new
+       {
+           Success = true,
+           notice.BillNo,
+           notice.DocumentStatus,
+           notice.Date,
+           Customer = notice.Customer?.Name,
+           notice.Note,
+           Entries = notice.Entries?.Select(e => new
+           {
+               e.Seq,
+               MaterialCode = e.Material?.Number,
+               MaterialName = e.Material?.Name,
+               e.Qty,
+               Unit = e.Unit?.Name,
+               Warehouse = e.Stock?.Name,
+               e.Lot
+           })
+       });
+   }
+
+    [HttpPost("process-delivery/{number}")]
+    public async Task<IActionResult> ProcessDelivery(string number)
+    {
+        var result = await _deliveryService.ProcessDeliveryAsync(number);
+        if (!result.Success)
+            return BadRequest(result);
+        return Ok(result);
+    }
+
+    [HttpGet("query-by-barcode/{barcode}")]
+    public IActionResult QueryByBarcode(string barcode)
+    {
+        var loc = Model_Data.Db.Queryable<Location>()
+            .Where(l => l.Reserve5 == barcode)
+            .First();
+
+        if (loc == null)
+            return BadRequest(new { Success = false, Message = "未找到该条码对应的库位" });
+
+        // 查询托盘产品信息
+        object? products = null;
+        if (!string.IsNullOrEmpty(loc.PallNo))
+        {
+            var pallMater = Model_Data.Db.Queryable<PallMater>()
+                .Where(p => p.PallNo == loc.PallNo)
+                .First();
+
+            if (pallMater != null)
+            {
+                var productList = new List<object>();
+                var slots = new (string?, decimal?)[]
+                {
+                    (pallMater.SubTitle1, pallMater.Weigh1),
+                    (pallMater.SubTitle2, pallMater.Weigh2),
+                    (pallMater.SubTitle3, pallMater.Weigh3),
+                    (pallMater.SubTitle4, pallMater.Weigh4),
+                    (pallMater.SubTitle5, pallMater.Weigh5),
+                    (pallMater.SubTitle6, pallMater.Weigh6),
+                };
+
+                foreach (var (subTitle, weight) in slots)
+                {
+                    if (string.IsNullOrEmpty(subTitle)) continue;
+
+                    var barcodeInfo = Model_Data.Db.Queryable<Barcode>()
+                        .Where(b => b.Number == subTitle)
+                        .First();
+
+                    productList.Add(new
+                    {
+                        Barcode = subTitle,
+                        Weight = weight,
+                        MaterialNo = barcodeInfo?.MaterialNo,
+                        MaterialName = barcodeInfo?.MaterialName,
+                        MaterialModel = barcodeInfo?.MaterialModel,
+                        Qty = barcodeInfo?.AuxQty
+                    });
+                }
+
+                products = productList;
+            }
+        }
+
+        return Ok(new
+        {
+            Success = true,
+            loc.LocationCode,
+            loc.LocationType,
+            loc.ShelfCode,
+            loc.Status,
+            StatusText = loc.Status == 0 ? "空闲" : "有货",
+            loc.PallNo,
+            loc.TotalWeight,
+            LimitWeight = loc.LimitWeightt,
+            loc.Reserve5,
+            loc.EnableFlag,
+            Products = products
+        });
     }
 }

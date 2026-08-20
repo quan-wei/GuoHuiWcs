@@ -22,7 +22,7 @@ namespace Guohui_Wcs.Helper.AgvOrderHleper
         /// <param name="targetPoints">任务目标点</param>
         /// <param name="taskConfig">任务配置的id</param>
         /// <returns></returns>
-        public OrderResult CreateTask(List<string> targetPoints)
+        public OrderResult CreateTask(List<string> targetPoints,string taskcode)
         {
             string url = BaseUrl + "/rcms/services/rest/hikRpcService/genAgvSchedulingTask";
             Guid guid= Guid.NewGuid();
@@ -32,6 +32,7 @@ namespace Guohui_Wcs.Helper.AgvOrderHleper
                 taskTyp="F11",
                 ctnrTyp="1",
                 priority="1",
+                taskcode= taskcode,
                 positionCodePath = new[]
                 {
         new {

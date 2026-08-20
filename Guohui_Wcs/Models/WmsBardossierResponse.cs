@@ -1,81 +1,140 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 
 namespace Guohui_Wcs.Models;
 
 public class WmsBardossierResponse
 {
-    public int total { get; set; }
-    public string fixed_filter { get; set; } = string.Empty;
-    public string sub_title { get; set; } = string.Empty;
-    public int page_count { get; set; }
-    public string params_for_create { get; set; } = string.Empty;
-    public List<BardossierItem> info_list { get; set; } = new();
+    [JsonProperty("total")]
+    public int Total { get; set; }
+
+    [JsonProperty("fixed_filter")]
+    public string FixedFilter { get; set; } = string.Empty;
+
+    [JsonProperty("sub_title")]
+    public string SubTitle { get; set; } = string.Empty;
+
+    [JsonProperty("page_count")]
+    public int PageCount { get; set; }
+
+    [JsonProperty("params_for_create")]
+    public string ParamsForCreate { get; set; } = string.Empty;
+
+    [JsonProperty("info_list")]
+    public List<BardossierItem> InfoList { get; set; } = new();
 }
 
 public class BardossierItem
 {
-    public string id { get; set; } = string.Empty;
+    [JsonProperty("id")]
+    public string Id { get; set; } = string.Empty;
 
     /// <summary>条码号</summary>
-    public string number { get; set; } = string.Empty;
+    [JsonProperty("number")]
+    public string Number { get; set; } = string.Empty;
 
     /// <summary>物料编码</summary>
     [JsonProperty("material$number")]
-    public string material_number { get; set; } = string.Empty;
+    public string MaterialNumber { get; set; } = string.Empty;
 
     /// <summary>规格型号</summary>
     [JsonProperty("material$model")]
-    public string material_model { get; set; } = string.Empty;
+    public string MaterialModel { get; set; } = string.Empty;
 
     /// <summary>数量</summary>
-    public string qty { get; set; } = string.Empty;
+    [JsonProperty("qty")]
+    public string Qty { get; set; } = string.Empty;
 
     /// <summary>辅助数量</summary>
-    public string auxqty { get; set; } = string.Empty;
+    [JsonProperty("auxqty")]
+    public string AuxQty { get; set; } = string.Empty;
 
     /// <summary>来源单号</summary>
-    public string billnum { get; set; } = string.Empty;
+    [JsonProperty("billnum")]
+    public string BillNum { get; set; } = string.Empty;
 
     /// <summary>批次</summary>
-    public string pc { get; set; } = string.Empty;
+    [JsonProperty("pc")]
+    public string Pc { get; set; } = string.Empty;
 
     /// <summary>行号</summary>
-    public string lineno { get; set; } = string.Empty;
+    [JsonProperty("lineno")]
+    public string Lineno { get; set; } = string.Empty;
 
-    public int version { get; set; }
-    public bool ischanged { get; set; }
-    public bool ismix { get; set; }
-    public int level { get; set; }
+    [JsonProperty("version")]
+    public int Version { get; set; }
 
-    public NameTitle? material { get; set; }
-    public NameTitle? warehouse { get; set; }
-    public NameTitle? location { get; set; }
-    public NameTitle? unit { get; set; }
-    public NameTitle? customer { get; set; }
-    public NameTitle? billtype { get; set; }
-    public NameTitle? barrule { get; set; }
-    public NameTitle? barstatus { get; set; }
-    public BartypeInfo? bartype { get; set; }
-    public CheckStatusInfo? checkstatus { get; set; }
+    [JsonProperty("ischanged")]
+    public bool IsChanged { get; set; }
+
+    [JsonProperty("ismix")]
+    public bool IsMix { get; set; }
+
+    [JsonProperty("level")]
+    public int Level { get; set; }
+
+    [JsonProperty("material")]
+    public NameTitle? Material { get; set; }
+
+    [JsonProperty("warehouse")]
+    public NameTitle? Warehouse { get; set; }
+
+    [JsonProperty("location")]
+    public NameTitle? Location { get; set; }
+
+    [JsonProperty("unit")]
+    public NameTitle? Unit { get; set; }
+
+    [JsonProperty("customer")]
+    public NameTitle? Customer { get; set; }
+
+    [JsonProperty("billtype")]
+    public NameTitle? BillType { get; set; }
+
+    [JsonProperty("barrule")]
+    public NameTitle? BarRule { get; set; }
+
+    [JsonProperty("barstatus")]
+    public NameTitle? BarStatus { get; set; }
+
+    [JsonProperty("bartype")]
+    public BartypeInfo? BarType { get; set; }
+
+    [JsonProperty("checkstatus")]
+    public CheckStatusInfo? CheckStatus { get; set; }
 }
 
 public class NameTitle
 {
-    public string name { get; set; } = string.Empty;
-    public string id { get; set; } = string.Empty;
-    public string title { get; set; } = string.Empty;
-    public string? _type { get; set; }
-    public string? number { get; set; }
+    [JsonProperty("name")]
+    public string Name { get; set; } = string.Empty;
+
+    [JsonProperty("id")]
+    public string Id { get; set; } = string.Empty;
+
+    [JsonProperty("title")]
+    public string Title { get; set; } = string.Empty;
+
+    [JsonProperty("_type")]
+    public string? Type { get; set; }
+
+    [JsonProperty("number")]
+    public string? Number { get; set; }
 }
 
 public class BartypeInfo
 {
-    public string title { get; set; } = string.Empty;
-    public string value { get; set; } = string.Empty;
+    [JsonProperty("title")]
+    public string Title { get; set; } = string.Empty;
+
+    [JsonProperty("value")]
+    public string Value { get; set; } = string.Empty;
 }
 
 public class CheckStatusInfo
 {
-    public string title { get; set; } = string.Empty;
-    public string value { get; set; } = string.Empty;
+    [JsonProperty("title")]
+    public string Title { get; set; } = string.Empty;
+
+    [JsonProperty("value")]
+    public string Value { get; set; } = string.Empty;
 }

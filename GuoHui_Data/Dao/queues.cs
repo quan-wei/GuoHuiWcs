@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Linq;
 using System.Text;
 using SqlSugar;
@@ -85,6 +85,8 @@ namespace Models
            /// Nullable:True
            /// </summary>           
            public string? Reserver3 {get;set;}
+
+
 
            /// <summary>
            /// Desc:

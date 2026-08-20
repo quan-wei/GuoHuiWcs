@@ -23,7 +23,7 @@ public class ApiClientService : IDisposable
     private readonly bool _ownsHttpClient;
 
     private const string BaseUrl = "http://191.167.10.102:8081";
-    private static readonly TimeSpan SessionLifetime = TimeSpan.FromHours(24);
+    private static readonly TimeSpan SessionLifetime = TimeSpan.FromHours(6);
 
     private static string? _cachedSession;
     private static string? _cachedLocale;
@@ -83,6 +83,22 @@ public class ApiClientService : IDisposable
     public async Task<string> InvokeAsync(string endpoint, string jsonBody)
     {
         var session = await GetSessionAsync();
+        var content = await SendRequestAsync(session, endpoint, jsonBody);
+
+        if (IsSessionTimeout(content))
+        {
+            _logger.LogWarning("Session timeout detected for {Endpoint}, re-logging in...", endpoint);
+            _cachedSession = null;
+            _lastLoginTime = DateTime.MinValue;
+            session = await GetSessionAsync();
+            content = await SendRequestAsync(session, endpoint, jsonBody);
+        }
+
+        return content;
+    }
+
+    private async Task<string> SendRequestAsync(string session, string endpoint, string jsonBody)
+    {
         var url = $"{BaseUrl}/web/api/invoke/{session}/{endpoint}";
 
         using var request = new HttpRequestMessage(HttpMethod.Post, url);
@@ -98,6 +114,11 @@ public class ApiClientService : IDisposable
         return await response.Content.ReadAsStringAsync();
     }
 
+    private static bool IsSessionTimeout(string content)
+    {
+        return content.Contains("server.error.session_timeout", StringComparison.OrdinalIgnoreCase);
+    }
+
     public async Task<WmsBardossierResponse> SelectBardossierAsync(string barcode)
     {
         var json = await InvokeAsync("wms_bardossier.select",
@@ -109,13 +130,13 @@ public class ApiClientService : IDisposable
     public async Task<Barcode?> SyncBardossierToDbAsync(string barcode)
     {
         var result = await SelectBardossierAsync(barcode);
-        if (result.total == 0 || result.info_list.Count == 0)
+        if (result.Total == 0 || result.InfoList.Count == 0)
         {
             _logger.LogWarning("WMS returned no data for barcode: {Barcode}", barcode);
             return null;
         }
 
-        var item = result.info_list[0];
+        var item = result.InfoList[0];
         var entity = MapToBarcode(item);
         var db = Model_Data.Db;
 
@@ -144,23 +165,23 @@ public class ApiClientService : IDisposable
     {
         return new Barcode
         {
-            Number = item.number,
-            BarType = item.bartype?.value ?? "",
-            BarStatus = MapBarStatus(item.barstatus?.name),
-            Qty = decimal.TryParse(item.qty, out var q) ? q : 0,
-            AuxQty = decimal.TryParse(item.auxqty, out var aq) ? aq : null,
-            CheckStatus = item.checkstatus?.value ?? "",
-            WarehouseId = item.warehouse?.id,
-            WarehouseName = item.warehouse?.name,
-            LocationId = item.location?.id,
-            LocationName = item.location?.name,
-            MaterialId = item.material?.id,
-            MaterialNo = item.material_number,
-            MaterialName = item.material?.name,
-            MaterialModel = item.material_model,
-            PC = item.pc,
-            CustomerId = item.customer?.id,
-            CustomerName = item.customer?.name
+            Number = item.Number,
+            BarType = item.BarType?.Value ?? "",
+            BarStatus = MapBarStatus(item.BarStatus?.Name),
+            Qty = decimal.TryParse(item.Qty, out var q) ? q : 0,
+            AuxQty = decimal.TryParse(item.AuxQty, out var aq) ? aq : null,
+            CheckStatus = item.CheckStatus?.Value ?? "",
+            WarehouseId = item.Warehouse?.Id,
+            WarehouseName = item.Warehouse?.Name,
+            LocationId = item.Location?.Id,
+            LocationName = item.Location?.Name,
+            MaterialId = item.Material?.Id,
+            MaterialNo = item.MaterialNumber,
+            MaterialName = item.Material?.Name,
+            MaterialModel = item.MaterialModel,
+            PC = item.Pc,
+            CustomerId = item.Customer?.Id,
+            CustomerName = item.Customer?.Name
         };
     }
 

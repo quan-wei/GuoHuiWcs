@@ -91,17 +91,18 @@ public class LocationAllocationService
                 CreateTime = DateTime.Now
             };
 
-        for (int i = 0; i < syncedBarcodes.Count && i < 6; i++)
+        for (int i = 0; i < syncedBarcodes.Count && i < 15; i++)
         {
             var bc = syncedBarcodes[i];
-            switch (i)
+            var index = i + 1;
+
+            var subTitleProp = typeof(PallMater).GetProperty($"SubTitle{index}");
+            var weighProp = typeof(PallMater).GetProperty($"Weigh{index}");
+
+            if (subTitleProp != null && weighProp != null)
             {
-                case 0: pallMater.SubTitle1 = bc.Number; pallMater.Weigh1 = bc.Qty; break;
-                case 1: pallMater.SubTitle2 = bc.Number; pallMater.Weigh2 = bc.Qty; break;
-                case 2: pallMater.SubTitle3 = bc.Number; pallMater.Weigh3 = bc.Qty; break;
-                case 3: pallMater.SubTitle4 = bc.Number; pallMater.Weigh4 = bc.Qty; break;
-                case 4: pallMater.SubTitle5 = bc.Number; pallMater.Weigh5 = bc.Qty; break;
-                case 5: pallMater.SubTitle6 = bc.Number; pallMater.Weigh6 = bc.Qty; break;
+                subTitleProp.SetValue(pallMater, bc.Number);
+                weighProp.SetValue(pallMater, bc.Qty);
             }
         }
         if (totalWeight <= 0)
@@ -162,7 +163,7 @@ public class LocationAllocationService
             if (request.MaterNo == null || request.MaterNo.Count == 0)
                 return Fail("物料号不能为空");
 
-            decimal totalWeight = 0;
+            decimal? totalWeight = 0;
             var syncedBarcodes = new List<Barcode>();
 
             foreach (var code in request.MaterNo)
@@ -171,7 +172,7 @@ public class LocationAllocationService
                 if (wmsResult != null)
                 {
                     syncedBarcodes.Add(wmsResult);
-                    totalWeight += wmsResult.Qty;
+                    totalWeight += wmsResult.AuxQty;
                 }
             }
 
@@ -192,12 +193,12 @@ public class LocationAllocationService
                 var bc = syncedBarcodes[i];
                 switch (i)
                 {
-                    case 0: pallMater.SubTitle1 = bc.Number; pallMater.Weigh1 = bc.Qty; break;
-                    case 1: pallMater.SubTitle2 = bc.Number; pallMater.Weigh2 = bc.Qty; break;
-                    case 2: pallMater.SubTitle3 = bc.Number; pallMater.Weigh3 = bc.Qty; break;
-                    case 3: pallMater.SubTitle4 = bc.Number; pallMater.Weigh4 = bc.Qty; break;
-                    case 4: pallMater.SubTitle5 = bc.Number; pallMater.Weigh5 = bc.Qty; break;
-                    case 5: pallMater.SubTitle6 = bc.Number; pallMater.Weigh6 = bc.Qty; break;
+                    case 0: pallMater.SubTitle1 = bc.Number; pallMater.Weigh1 = bc.AuxQty; break;
+                    case 1: pallMater.SubTitle2 = bc.Number; pallMater.Weigh2 = bc.AuxQty; break;
+                    case 2: pallMater.SubTitle3 = bc.Number; pallMater.Weigh3 = bc.AuxQty; break;
+                    case 3: pallMater.SubTitle4 = bc.Number; pallMater.Weigh4 = bc.AuxQty; break;
+                    case 4: pallMater.SubTitle5 = bc.Number; pallMater.Weigh5 = bc.AuxQty; break;
+                    case 5: pallMater.SubTitle6 = bc.Number; pallMater.Weigh6 = bc.AuxQty; break;
                 }
             }
 
@@ -228,7 +229,7 @@ public class LocationAllocationService
                 TotalWeight = null,
                 UpdateTime = DateTime.Now
             })
-            .Where(l => l.LocationCode == locationCode && l.Status == 1)
+            .Where(l => l.Reserve5 == locationCode )
             .ExecuteCommand();
 
         return rows > 0
@@ -312,7 +313,7 @@ public class LocationAllocationService
         return null;
     }
 
-    private bool CanPlace(Location location, decimal weightKg)
+    private bool CanPlace(Location location, decimal? weightKg)
     {
         if (location.LocationType == "地面库位" || location.LocationType == "一层货架")
             return true;
@@ -344,7 +345,7 @@ public class LocationAllocationService
         var rows = _db.Updateable<Location>()
             .SetColumns(l => new Location
             {
-                Status = 1,
+                Status = 2,
                 PallNo = pallNo,
                 TotalWeight = weightKg,
                 UpdateTime = DateTime.Now

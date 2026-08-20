@@ -1,16 +1,24 @@
 using System.Text.Json;
 
+using System.Text.Json.Serialization;
+
 namespace Guohui_Wcs.Models
 {
     public class RobotTaskNotification
     {
-        public string? reqCode { get; set; }
+        [JsonPropertyName("reqCode")]
+        public string? ReqCode { get; set; }
 
-        public string? method { get; set; }
-        public string? taskCode { get; set; }
+        [JsonPropertyName("method")]
+        public string? Method { get; set; }
 
-        public string? wbCode { get; set; }
-        public string? podCode { get; set; }
+        [JsonPropertyName("taskCode")]
+        public string? TaskCode { get; set; }
 
+        [JsonPropertyName("wbCode")]
+        public string? WbCode { get; set; }
+
+        [JsonPropertyName("podCode")]
+        public string? PodCode { get; set; }
     }
 }
