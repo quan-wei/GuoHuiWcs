@@ -1,4 +1,4 @@
-ï»¿using Guohui_Wcs.Models;
+using Guohui_Wcs.Models;
 using Models;
 using SqlSugar;
 using System.Linq.Expressions;
@@ -45,7 +45,7 @@ public class LocationAllocationService
     private readonly SqlSugarScope _db;
     private readonly ApiClientService _apiClient;
 
-    private static readonly string[] UpperTiers = { "äºŒå±‚è´§æ¶", "ä¸‰å±‚è´§æ¶", "å››å±‚è´§æ¶" };
+    private static readonly string[] UpperTiers = { "¶ş²ã»õ¼Ü", "Èı²ã»õ¼Ü", "ËÄ²ã»õ¼Ü" };
 
     public LocationAllocationService(
         ILogger<LocationAllocationService> logger,
@@ -60,7 +60,7 @@ public class LocationAllocationService
     public async Task<AllocationResult> Allocate(AllocationRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.StartPoint))
-            return Fail("èµ·ç‚¹ä¸èƒ½ä¸ºç©º");
+            return Fail("Æğµã²»ÄÜÎª¿Õ");
 
         var pallNo = GeneratePallNo();
 
@@ -81,9 +81,9 @@ public class LocationAllocationService
         }
         else
         {
-            return Fail("ç‰©æ–™å·ä¸èƒ½ä¸ºç©º");
+            return Fail("ÎïÁÏºÅ²»ÄÜÎª¿Õ");
         }
-            // æ’å…¥ PallMater è®°å½•
+            // ²åÈë PallMater ¼ÇÂ¼
             var pallMater = new PallMater
             {
                 PallNo = pallNo,
@@ -107,12 +107,12 @@ public class LocationAllocationService
         }
         if (totalWeight <= 0)
         {
-            return Fail("é‡é‡å¼‚å¸¸");
+            return Fail("ÖØÁ¿Òì³£");
         }
 
         AllocationResult? allocationResult = null;
 
-        var level1 = FindFreeLocation(l => l.LocationType == "ä¸€å±‚è´§æ¶", null);
+        var level1 = FindFreeLocation(l => l.LocationType == "Ò»²ã»õ¼Ü", null);
         if (level1 != null)
             allocationResult = TryAllocate(level1, pallNo, totalWeight);
 
@@ -130,7 +130,7 @@ public class LocationAllocationService
         }
 
         if (allocationResult == null)
-            return Fail("æ— å¯ç”¨åº“ä½ï¼šä¸€å±‚å·²æ»¡ï¼Œä¸”ä¸Šå±‚åº“ä½å‡ä¸æ»¡è¶³é‡é‡é™åˆ¶");
+            return Fail("ÎŞ¿ÉÓÃ¿âÎ»£ºÒ»²ãÒÑÂú£¬ÇÒÉÏ²ã¿âÎ»¾ù²»Âú×ãÖØÁ¿ÏŞÖÆ");
 
         if (allocationResult.Success)
         {
@@ -149,19 +149,19 @@ public class LocationAllocationService
             .First(l => l.Reserve5 == locationCode);
 
         if (loc == null)
-            return Fail("ç»ˆç‚¹åº“ä½ä¸å­˜åœ¨");
+            return Fail("ÖÕµã¿âÎ»²»´æÔÚ");
         if (loc.Status != 0 || !string.IsNullOrEmpty(loc.PallNo))
-            return Fail("ç»ˆç‚¹åº“ä½å·²è¢«å ç”¨");
+            return Fail("ÖÕµã¿âÎ»ÒÑ±»Õ¼ÓÃ");
         if (loc.EnableFlag == false)
-            return Fail("ç»ˆç‚¹åº“ä½å·²ç¦ç”¨");
+            return Fail("ÖÕµã¿âÎ»ÒÑ½ûÓÃ");
 
-        // G å¼€å¤´ï¼šå‡ºåº“æ“ä½œï¼Œä¸æ ¡éªŒç‰©æ–™å·ï¼Œé‡é‡ä¸º 0
+        // G ¿ªÍ·£º³ö¿â²Ù×÷£¬²»Ğ£ÑéÎïÁÏºÅ£¬ÖØÁ¿Îª 0
         bool isGLocation = locationCode.StartsWith("G", StringComparison.OrdinalIgnoreCase);
 
         if (!isGLocation)
         {
             if (request.MaterNo == null || request.MaterNo.Count == 0)
-                return Fail("ç‰©æ–™å·ä¸èƒ½ä¸ºç©º");
+                return Fail("ÎïÁÏºÅ²»ÄÜÎª¿Õ");
 
             decimal? totalWeight = 0;
             var syncedBarcodes = new List<Barcode>();
@@ -177,9 +177,9 @@ public class LocationAllocationService
             }
 
             if (totalWeight == 0)
-                return Fail("WMS æœªè¿”å›ä»»ä½•ç‰©æ–™é‡é‡ï¼Œè¯·æ£€æŸ¥ç‰©æ–™ç ");
+                return Fail("WMS Î´·µ»ØÈÎºÎÎïÁÏÖØÁ¿£¬Çë¼ì²éÎïÁÏÂë");
 
-            var pallMater = new PallMater
+            /*var pallMater = new PallMater
             {
                 PallNo = pallNo,
                 Weight = totalWeight,
@@ -200,14 +200,34 @@ public class LocationAllocationService
                     case 4: pallMater.SubTitle5 = bc.Number; pallMater.Weigh5 = bc.AuxQty; break;
                     case 5: pallMater.SubTitle6 = bc.Number; pallMater.Weigh6 = bc.AuxQty; break;
                 }
-            }
+            }*/
+            var pallMater = new PallMater
+            {
+                PallNo = pallNo,
+                Weight = totalWeight,
+                CreateTime = DateTime.Now
+            };
 
+            for (int i = 0; i < syncedBarcodes.Count && i < 15; i++)
+            {
+                var bc = syncedBarcodes[i];
+                var index = i + 1;
+
+                var subTitleProp = typeof(PallMater).GetProperty($"SubTitle{index}");
+                var weighProp = typeof(PallMater).GetProperty($"Weigh{index}");
+
+                if (subTitleProp != null && weighProp != null)
+                {
+                    subTitleProp.SetValue(pallMater, bc.Number);
+                    weighProp.SetValue(pallMater, bc.Qty);
+                }
+            }
             _db.Insertable(pallMater).ExecuteCommand();
             _logger.LogInformation("PallMater created: {PallNo}, weight: {Weight}, from: {Start}, to: {End}",
                 pallNo, totalWeight, request.StartPoint, locationCode);
 
             if (!CanPlace(loc, totalWeight))
-                return Fail("æ‰€åœ¨è´§æ¶å¯¹å·²è¶…é‡é™åˆ¶");
+                return Fail("ËùÔÚ»õ¼Ü¶ÔÒÑ³¬ÖØÏŞÖÆ");
 
             return TryAllocate(loc, pallNo, totalWeight);
         }
@@ -233,8 +253,8 @@ public class LocationAllocationService
             .ExecuteCommand();
 
         return rows > 0
-            ? new AllocationResult { Success = true, Message = "åº“ä½å·²é‡Šæ”¾" }
-            : Fail("åº“ä½é‡Šæ”¾å¤±è´¥ï¼Œå¯èƒ½å·²æ˜¯ç©ºé—²çŠ¶æ€");
+            ? new AllocationResult { Success = true, Message = "¿âÎ»ÒÑÊÍ·Å" }
+            : Fail("¿âÎ»ÊÍ·ÅÊ§°Ü£¬¿ÉÄÜÒÑÊÇ¿ÕÏĞ×´Ì¬");
     }
 
     public void RollbackAllocation(string locationCode, string pallNo)
@@ -254,7 +274,7 @@ public class LocationAllocationService
             .Where(p => p.PallNo == pallNo)
             .ExecuteCommand();
 
-        _logger.LogWarning("AGVä»»åŠ¡å¤±è´¥ï¼Œå·²å›æ»šåº“ä½ {Location} å’Œæ‰˜ç›˜ {PallNo}", locationCode, pallNo);
+        _logger.LogWarning("AGVÈÎÎñÊ§°Ü£¬ÒÑ»Ø¹ö¿âÎ» {Location} ºÍÍĞÅÌ {PallNo}", locationCode, pallNo);
     }
 
     public GroupLoadInfo GetGroupLoad(string shelfCode)
@@ -315,7 +335,7 @@ public class LocationAllocationService
 
     private bool CanPlace(Location location, decimal? weightKg)
     {
-        if (location.LocationType == "åœ°é¢åº“ä½" || location.LocationType == "ä¸€å±‚è´§æ¶")
+        if (location.LocationType == "µØÃæ¿âÎ»" || location.LocationType == "Ò»²ã»õ¼Ü")
             return true;
 
         return CanPlaceOnTier(location, location.LocationType, weightKg);
@@ -354,9 +374,9 @@ public class LocationAllocationService
             .ExecuteCommand();
 
         if (rows == 0)
-            return Fail("åº“ä½åœ¨æ›´æ–°æ—¶è¢«å…¶ä»–æ“ä½œå ç”¨");
+            return Fail("¿âÎ»ÔÚ¸üĞÂÊ±±»ÆäËû²Ù×÷Õ¼ÓÃ");
 
-        _logger.LogInformation("æ‰˜ç›˜ {PallNo} ({WeightKg}kg) å·²åˆ†é…è‡³ {Location} ({Type})",
+        _logger.LogInformation("ÍĞÅÌ {PallNo} ({WeightKg}kg) ÒÑ·ÖÅäÖÁ {Location} ({Type})",
             pallNo, weightKg, location.LocationCode, location.LocationType);
 
         return new AllocationResult
@@ -366,7 +386,7 @@ public class LocationAllocationService
             LocationType = location.LocationType,
             WeightKg = weightKg,
             PallNo = pallNo,
-            Message = "åˆ†é…æˆåŠŸ"
+            Message = "·ÖÅä³É¹¦"
         };
     }
 
