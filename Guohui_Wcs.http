@@ -1,0 +1,6 @@
+@Guohui_Wcs_HostAddress = http://localhost:5195
+
+GET {{Guohui_Wcs_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

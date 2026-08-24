@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 using System;
+=======
+﻿using System;
+>>>>>>> 28c1743cce8a7eb149f164ce113c0e91048a2a1b
 using System.Linq;
 using System.Text;
 using SqlSugar;
@@ -86,8 +90,11 @@ namespace Models
            /// </summary>           
            public string? Reserver3 {get;set;}
 
+<<<<<<< HEAD
 
 
+=======
+>>>>>>> 28c1743cce8a7eb149f164ce113c0e91048a2a1b
            /// <summary>
            /// Desc:
            /// Default:DateTime.Now

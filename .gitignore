@@ -1,8 +1,14 @@
+<<<<<<< HEAD
 ## .NET
+=======
+﻿## Visual Studio
+.vs/
+>>>>>>> 28c1743cce8a7eb149f164ce113c0e91048a2a1b
 bin/
 obj/
 *.user
 *.suo
+<<<<<<< HEAD
 *.userosscache
 *.sln.docstates
 *.userprefs
@@ -45,3 +51,10 @@ temp/
 *.swp
 *.swo
 *~
+=======
+
+## .NET
+*.user
+*.suo
+*.userprefs
+>>>>>>> 28c1743cce8a7eb149f164ce113c0e91048a2a1b
