@@ -14,7 +14,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\GuoHui_Data\GuoHui_Data.csproj" />
-    <ProjectReference Include="..\Guohui_Wcs\Guohui_Wcs.csproj" />
+    <ProjectReference Include="..\Guohui_Wcs.csproj" />
   </ItemGroup>
 
   <ItemGroup>
