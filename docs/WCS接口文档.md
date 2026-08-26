@@ -227,7 +227,49 @@ GET /api/Location/query-by-barcode/{barcode}
 
 ---
 
-### 1.7 查询金蝶出库通知单 &ensp; `[开发中]`
+### 1.7 按物料编码查询托盘
+
+根据物料编码前缀查询托盘、库位及对应物料编码和重量。查询范围为 `PallMater` 表中的 `SubTitle1~SubTitle15`，返回所有以传入编码开头的匹配记录。
+
+```
+GET /api/Location/query-by-material/{code}
+```
+
+| 参数 | 位置 | 类型 | 必填 | 说明 |
+|------|------|------|------|------|
+| `code` | Path | `string` | 是 | 物料编码前缀，如 `F0.03.00198` |
+
+**成功响应** `200`
+
+```json
+{
+    "Success": true,
+    "Code": "F0.03.00198",
+    "Count": 1,
+    "Data": [
+        {
+            "PallNo": "PALL202608060001",
+            "LocationCode": "A01-01-01",
+            "ShelfCode": "1",
+            "MaterialCode": "F0.03.00198-001",
+            "Weight": 150.5
+        }
+    ]
+}
+```
+
+**失败响应** `400`
+
+```json
+{
+    "Success": false,
+    "Message": "编码不能为空"
+}
+```
+
+---
+
+### 1.8 查询金蝶出库通知单 &ensp; `[开发中]`
 
 通过金蝶 View 接口查询出库通知单的详细信息。
 
@@ -271,7 +313,7 @@ GET /api/Location/query-delivery/{number}
 
 ---
 
-### 1.8 处理出库通知单 &ensp; `[开发中]`
+### 1.9 处理出库通知单 &ensp; `[开发中]`
 
 根据出库通知单号，从金蝶获取单据 → 匹配托盘 → 生成出库队列任务。
 

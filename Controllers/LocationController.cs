@@ -4,6 +4,7 @@ using Guohui_Wcs.Models.Kingdee;
 using Guohui_Wcs.Services;
 using Microsoft.AspNetCore.Mvc;
 using Models;
+using SqlSugar;
 
 namespace Guohui_Wcs.Controllers;
 
@@ -15,6 +16,16 @@ public class LocationController : ControllerBase
     {
         public string? Reason {  get; set; }
     }
+
+    public sealed class PallMaterCodeItem
+    {
+        public string? PallNo { get; set; }
+        public string? LocationCode { get; set; }
+        public string? ShelfCode { get; set; }
+        public string? MaterialCode { get; set; }
+        public decimal? Weight { get; set; }
+    }
+
     private readonly LocationAllocationService _allocationService;
     private readonly KingdeeApiService _kingdeeApi;
     private readonly DeliveryOrderService _deliveryService;
@@ -182,6 +193,15 @@ public class LocationController : ControllerBase
                     (pallMater.SubTitle4, pallMater.Weigh4),
                     (pallMater.SubTitle5, pallMater.Weigh5),
                     (pallMater.SubTitle6, pallMater.Weigh6),
+                    (pallMater.SubTitle7, pallMater.Weigh7),
+                    (pallMater.SubTitle8, pallMater.Weigh8),
+                    (pallMater.SubTitle9, pallMater.Weigh9),
+                    (pallMater.SubTitle10, pallMater.Weigh10),
+                    (pallMater.SubTitle11, pallMater.Weigh11),
+                    (pallMater.SubTitle12, pallMater.Weigh12),
+                    (pallMater.SubTitle13, pallMater.Weigh13),
+                    (pallMater.SubTitle14, pallMater.Weigh14),
+                    (pallMater.SubTitle15, pallMater.Weigh15),
                 };
 
                 foreach (var (subTitle, weight) in slots)
@@ -221,6 +241,54 @@ public class LocationController : ControllerBase
             loc.Reserve5,
             loc.EnableFlag,
             Products = products
+        });
+    }
+
+    [HttpGet("query-by-material/{code}")]
+    public IActionResult QueryByMaterialCode(string code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+            return BadRequest(new { Success = false, Message = "编码不能为空" });
+
+        const string sql = """
+            SELECT
+                pm.PallNo,
+                pm.LocationCode,
+                pm.ShelfCode,
+                v.SubTitle AS MaterialCode,
+                v.Weigh AS Weight
+            FROM [dbo].[PallMater] pm
+            CROSS APPLY (VALUES
+                (pm.SubTitle1,  pm.Weigh1),
+                (pm.SubTitle2,  pm.Weigh2),
+                (pm.SubTitle3,  pm.Weigh3),
+                (pm.SubTitle4,  pm.Weigh4),
+                (pm.SubTitle5,  pm.Weigh5),
+                (pm.SubTitle6,  pm.Weigh6),
+                (pm.SubTitle7,  pm.Weigh7),
+                (pm.SubTitle8,  pm.Weigh8),
+                (pm.SubTitle9,  pm.Weigh9),
+                (pm.SubTitle10, pm.Weigh10),
+                (pm.SubTitle11, pm.Weigh11),
+                (pm.SubTitle12, pm.Weigh12),
+                (pm.SubTitle13, pm.Weigh13),
+                (pm.SubTitle14, pm.Weigh14),
+                (pm.SubTitle15, pm.Weigh15)
+            ) AS v(SubTitle, Weigh)
+            WHERE v.SubTitle LIKE @pattern + '%'
+            ORDER BY pm.PallNo
+            """;
+
+        var items = Model_Data.Db.Ado.SqlQuery<PallMaterCodeItem>(
+            sql,
+            new SugarParameter("@pattern", code)).ToList();
+
+        return Ok(new
+        {
+            Success = true,
+            Code = code,
+            Count = items.Count,
+            Data = items
         });
     }
 }
