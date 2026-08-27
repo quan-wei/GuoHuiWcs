@@ -4,6 +4,7 @@ using Guohui_Wcs.Models.Kingdee;
 using Guohui_Wcs.Services;
 using Microsoft.AspNetCore.Mvc;
 using Models;
+using SqlSugar;
 using System.Drawing;
 
 namespace Guohui_Wcs.Controllers;
@@ -12,6 +13,27 @@ namespace Guohui_Wcs.Controllers;
 [Route("api/[controller]")]
 public class LocationController : ControllerBase
 {
+    public sealed class QueryByNoItem
+    {
+        public string? LocationCode { get; set; }
+        public string? Reserve5 { get; set; }
+        public string? LocationType { get; set; }
+        public decimal? LimitWeightt { get; set; }
+        public decimal? TotalWeight { get; set; }
+        public string? PallNo { get; set; }
+        public decimal? PallWeight { get; set; }
+        public string? BarcodeNumber { get; set; }
+        public string? BarType { get; set; }
+        public decimal? Qty { get; set; }
+        public decimal? AuxQty { get; set; }
+        public string? WarehouseName { get; set; }
+        public string? MaterialNo { get; set; }
+        public string? MaterialName { get; set; }
+        public int? SubTitleIndex { get; set; }
+        public string? SubTitleValue { get; set; }
+        public decimal? CorrespondingWeight { get; set; }
+    }
+
     public class locks
     {
         public string? Reason {  get; set; }
@@ -178,74 +200,46 @@ public class LocationController : ControllerBase
         return Ok(result);
     }
 
-    [HttpGet("query-by-barcode/{barcode}")]
-    public IActionResult QueryByBarcode(string barcode)
+    [HttpGet("query-by-material/{code}")]
+    public IActionResult QueryByMaterialCode(string code)
     {
-        var loc = Model_Data.Db.Queryable<Location>()
-            .Where(l => l.Reserve5 == barcode)
-            .First();
+        if (string.IsNullOrWhiteSpace(code))
+            return BadRequest(new { Success = false, Message = "编码不能为空" });
 
-        if (loc == null)
-            return BadRequest(new { Success = false, Message = "未找到该条码对应的库位" });
+        const string sql = """
+            SELECT
+                LocationCode,
+                Reserve5,
+                LocationType,
+                LimitWeightt,
+                TotalWeight,
+                PallNo,
+                PallWeight,
+                BarcodeNumber,
+                BarType,
+                Qty,
+                AuxQty,
+                WarehouseName,
+                MaterialNo,
+                MaterialName,
+                SubTitleIndex,
+                SubTitleValue,
+                CorrespondingWeight
+            FROM [dbo].[querybyno]
+            WHERE SubTitleValue LIKE @pattern + '%'
+            ORDER BY PallNo, SubTitleIndex
+            """;
 
-        // 查询托盘产品信息
-        object? products = null;
-        if (!string.IsNullOrEmpty(loc.PallNo))
-        {
-            var pallMater = Model_Data.Db.Queryable<PallMater>()
-                .Where(p => p.PallNo == loc.PallNo)
-                .First();
-
-            if (pallMater != null)
-            {
-                var productList = new List<object>();
-                var slots = new (string?, decimal?)[]
-                {
-                    (pallMater.SubTitle1, pallMater.Weigh1),
-                    (pallMater.SubTitle2, pallMater.Weigh2),
-                    (pallMater.SubTitle3, pallMater.Weigh3),
-                    (pallMater.SubTitle4, pallMater.Weigh4),
-                    (pallMater.SubTitle5, pallMater.Weigh5),
-                    (pallMater.SubTitle6, pallMater.Weigh6),
-                };
-
-                foreach (var (subTitle, weight) in slots)
-                {
-                    if (string.IsNullOrEmpty(subTitle)) continue;
-
-                    var barcodeInfo = Model_Data.Db.Queryable<Barcode>()
-                        .Where(b => b.Number == subTitle)
-                        .First();
-
-                    productList.Add(new
-                    {
-                        Barcode = subTitle,
-                        Weight = weight,
-                        MaterialNo = barcodeInfo?.MaterialNo,
-                        MaterialName = barcodeInfo?.MaterialName,
-                        MaterialModel = barcodeInfo?.MaterialModel,
-                        Qty = barcodeInfo?.AuxQty
-                    });
-                }
-
-                products = productList;
-            }
-        }
+        var items = Model_Data.Db.Ado.SqlQuery<QueryByNoItem>(
+            sql,
+            new SugarParameter("@pattern", code)).ToList();
 
         return Ok(new
         {
             Success = true,
-            loc.LocationCode,
-            loc.LocationType,
-            loc.ShelfCode,
-            loc.Status,
-            StatusText = loc.Status == 0 ? "空闲" : "有货",
-            loc.PallNo,
-            loc.TotalWeight,
-            LimitWeight = loc.LimitWeightt,
-            loc.Reserve5,
-            loc.EnableFlag,
-            Products = products
+            Code = code,
+            Count = items.Count,
+            Data = items
         });
     }
 }

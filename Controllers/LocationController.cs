@@ -17,13 +17,25 @@ public class LocationController : ControllerBase
         public string? Reason {  get; set; }
     }
 
-    public sealed class PallMaterCodeItem
+    public sealed class QueryByNoItem
     {
-        public string? PallNo { get; set; }
         public string? LocationCode { get; set; }
-        public string? ShelfCode { get; set; }
-        public string? MaterialCode { get; set; }
-        public decimal? Weight { get; set; }
+        public string? Reserve5 { get; set; }
+        public string? LocationType { get; set; }
+        public decimal? LimitWeightt { get; set; }
+        public decimal? TotalWeight { get; set; }
+        public string? PallNo { get; set; }
+        public decimal? PallWeight { get; set; }
+        public string? BarcodeNumber { get; set; }
+        public string? BarType { get; set; }
+        public decimal? Qty { get; set; }
+        public decimal? AuxQty { get; set; }
+        public string? WarehouseName { get; set; }
+        public string? MaterialNo { get; set; }
+        public string? MaterialName { get; set; }
+        public int? SubTitleIndex { get; set; }
+        public string? SubTitleValue { get; set; }
+        public decimal? CorrespondingWeight { get; set; }
     }
 
     private readonly LocationAllocationService _allocationService;
@@ -252,34 +264,29 @@ public class LocationController : ControllerBase
 
         const string sql = """
             SELECT
-                pm.PallNo,
-                pm.LocationCode,
-                pm.ShelfCode,
-                v.SubTitle AS MaterialCode,
-                v.Weigh AS Weight
-            FROM [dbo].[PallMater] pm
-            CROSS APPLY (VALUES
-                (pm.SubTitle1,  pm.Weigh1),
-                (pm.SubTitle2,  pm.Weigh2),
-                (pm.SubTitle3,  pm.Weigh3),
-                (pm.SubTitle4,  pm.Weigh4),
-                (pm.SubTitle5,  pm.Weigh5),
-                (pm.SubTitle6,  pm.Weigh6),
-                (pm.SubTitle7,  pm.Weigh7),
-                (pm.SubTitle8,  pm.Weigh8),
-                (pm.SubTitle9,  pm.Weigh9),
-                (pm.SubTitle10, pm.Weigh10),
-                (pm.SubTitle11, pm.Weigh11),
-                (pm.SubTitle12, pm.Weigh12),
-                (pm.SubTitle13, pm.Weigh13),
-                (pm.SubTitle14, pm.Weigh14),
-                (pm.SubTitle15, pm.Weigh15)
-            ) AS v(SubTitle, Weigh)
-            WHERE v.SubTitle LIKE @pattern + '%'
-            ORDER BY pm.PallNo
+                LocationCode,
+                Reserve5,
+                LocationType,
+                LimitWeightt,
+                TotalWeight,
+                PallNo,
+                PallWeight,
+                BarcodeNumber,
+                BarType,
+                Qty,
+                AuxQty,
+                WarehouseName,
+                MaterialNo,
+                MaterialName,
+                SubTitleIndex,
+                SubTitleValue,
+                CorrespondingWeight
+            FROM [dbo].[querybyno]
+            WHERE SubTitleValue LIKE @pattern + '%'
+            ORDER BY PallNo, SubTitleIndex
             """;
 
-        var items = Model_Data.Db.Ado.SqlQuery<PallMaterCodeItem>(
+        var items = Model_Data.Db.Ado.SqlQuery<QueryByNoItem>(
             sql,
             new SugarParameter("@pattern", code)).ToList();
 

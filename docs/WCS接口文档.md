@@ -229,7 +229,7 @@ GET /api/Location/query-by-barcode/{barcode}
 
 ### 1.7 按物料编码查询托盘
 
-根据物料编码前缀查询托盘、库位及对应物料编码和重量。查询范围为 `PallMater` 表中的 `SubTitle1~SubTitle15`，返回所有以传入编码开头的匹配记录。
+根据物料编码前缀查询视图 `dbo.querybyno`，返回匹配的托盘、库位、条码及物料明细。
 
 ```
 GET /api/Location/query-by-material/{code}
@@ -248,11 +248,23 @@ GET /api/Location/query-by-material/{code}
     "Count": 1,
     "Data": [
         {
-            "PallNo": "PALL202608060001",
             "LocationCode": "A01-01-01",
-            "ShelfCode": "1",
-            "MaterialCode": "F0.03.00198-001",
-            "Weight": 150.5
+            "Reserve5": "F0.03.00198",
+            "LocationType": "一层货架",
+            "LimitWeightt": 2500.0,
+            "TotalWeight": 150.5,
+            "PallNo": "PALL202608060001",
+            "PallWeight": 150.5,
+            "BarcodeNumber": "F0.03.00198-001",
+            "BarType": "01",
+            "Qty": 1.0,
+            "AuxQty": 150.5,
+            "WarehouseName": "原料仓",
+            "MaterialNo": "MAT-001",
+            "MaterialName": "物料A",
+            "SubTitleIndex": 1,
+            "SubTitleValue": "F0.03.00198-001",
+            "CorrespondingWeight": 150.5
         }
     ]
 }
