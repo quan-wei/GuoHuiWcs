@@ -23,6 +23,7 @@ public class LocationController : ControllerBase
         public string? PallNo { get; set; }
         public decimal? PallWeight { get; set; }
         public string? BarcodeNumber { get; set; }
+        public string? CustomerName { get; set; }
         public string? BarType { get; set; }
         public decimal? Qty { get; set; }
         public decimal? AuxQty { get; set; }
@@ -199,6 +200,85 @@ public class LocationController : ControllerBase
             return BadRequest(result);
         return Ok(result);
     }
+    [HttpGet("query-by-barcode/{barcode}")]
+    public IActionResult QueryByBarcode(string barcode)
+    {
+        var loc = Model_Data.Db.Queryable<Location>()
+            .Where(l => l.Reserve5 == barcode)
+            .First();
+
+        if (loc == null)
+            return BadRequest(new { Success = false, Message = "未找到该条码对应的库位" });
+
+        // 查询托盘产品信息
+        object? products = null;
+        if (!string.IsNullOrEmpty(loc.PallNo))
+        {
+            var pallMater = Model_Data.Db.Queryable<PallMater>()
+                .Where(p => p.PallNo == loc.PallNo)
+                .First();
+
+            if (pallMater != null)
+            {
+                var productList = new List<object>();
+                var slots = new (string?, decimal?)[]
+                {
+                    (pallMater.SubTitle1, pallMater.Weigh1),
+                    (pallMater.SubTitle2, pallMater.Weigh2),
+                    (pallMater.SubTitle3, pallMater.Weigh3),
+                    (pallMater.SubTitle4, pallMater.Weigh4),
+                    (pallMater.SubTitle5, pallMater.Weigh5),
+                    (pallMater.SubTitle6, pallMater.Weigh6),
+                    (pallMater.SubTitle7, pallMater.Weigh7),
+                    (pallMater.SubTitle8, pallMater.Weigh8),
+                    (pallMater.SubTitle9, pallMater.Weigh9),
+                    (pallMater.SubTitle10, pallMater.Weigh10),
+                    (pallMater.SubTitle11, pallMater.Weigh11),
+                    (pallMater.SubTitle12, pallMater.Weigh12),
+                    (pallMater.SubTitle13, pallMater.Weigh13),
+                    (pallMater.SubTitle14, pallMater.Weigh14),
+                    (pallMater.SubTitle15, pallMater.Weigh15),
+                };
+
+                foreach (var (subTitle, weight) in slots)
+                {
+                    if (string.IsNullOrEmpty(subTitle)) continue;
+
+                    var barcodeInfo = Model_Data.Db.Queryable<Barcode>()
+                        .Where(b => b.Number == subTitle)
+                        .First();
+
+                    productList.Add(new
+                    {
+                        Barcode = subTitle,
+                        Weight = weight,
+                        MaterialNo = barcodeInfo?.MaterialNo,
+                        MaterialName = barcodeInfo?.MaterialName,
+                        MaterialModel = barcodeInfo?.MaterialModel,
+                        Qty = barcodeInfo?.Qty
+                    });
+                }
+
+                products = productList;
+            }
+        }
+
+        return Ok(new
+        {
+            Success = true,
+            loc.LocationCode,
+            loc.LocationType,
+            loc.ShelfCode,
+            loc.Status,
+            StatusText = loc.Status == 0 ? "空闲" : "有货",
+            loc.PallNo,
+            loc.TotalWeight,
+            LimitWeight = loc.LimitWeightt,
+            loc.Reserve5,
+            loc.EnableFlag,
+            Products = products
+        });
+    }
 
     [HttpGet("query-by-material/{code}")]
     public IActionResult QueryByMaterialCode(string code)
@@ -216,6 +296,7 @@ public class LocationController : ControllerBase
                 PallNo,
                 PallWeight,
                 BarcodeNumber,
+                CustomerName,
                 BarType,
                 Qty,
                 AuxQty,

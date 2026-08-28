@@ -27,6 +27,7 @@ public class LocationController : ControllerBase
         public string? PallNo { get; set; }
         public decimal? PallWeight { get; set; }
         public string? BarcodeNumber { get; set; }
+        public string? CustomerName { get; set; }
         public string? BarType { get; set; }
         public decimal? Qty { get; set; }
         public decimal? AuxQty { get; set; }
@@ -272,6 +273,7 @@ public class LocationController : ControllerBase
                 PallNo,
                 PallWeight,
                 BarcodeNumber,
+                CustomerName,
                 BarType,
                 Qty,
                 AuxQty,

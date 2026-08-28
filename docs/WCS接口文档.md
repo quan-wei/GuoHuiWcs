@@ -256,6 +256,7 @@ GET /api/Location/query-by-material/{code}
             "PallNo": "PALL202608060001",
             "PallWeight": 150.5,
             "BarcodeNumber": "F0.03.00198-001",
+            "CustomerName": "客户A",
             "BarType": "01",
             "Qty": 1.0,
             "AuxQty": 150.5,

@@ -4,6 +4,7 @@ using Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System.Net;
+using NLog;
 
 namespace Guohui_Wcs.Services;
 
@@ -21,6 +22,7 @@ public class ApiClientService : IDisposable
     private readonly HttpClient _httpClient;
     private readonly ILogger<ApiClientService> _logger;
     private readonly bool _ownsHttpClient;
+    private static readonly Logger RequestLogger = LogManager.GetLogger("RequestLogger");
 
     private const string BaseUrl = "http://191.167.10.102:8081";
     private static readonly TimeSpan SessionLifetime = TimeSpan.FromHours(24);
@@ -93,9 +95,15 @@ public class ApiClientService : IDisposable
             Headers = { ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/plain") }
         };
 
+        RequestLogger.Info("出站请求 Endpoint={Endpoint} Body={Body}", endpoint, jsonBody);
+
         var response = await _httpClient.SendAsync(request);
+        var responseBody = await response.Content.ReadAsStringAsync();
+
+        RequestLogger.Info("出站响应 Endpoint={Endpoint} Status={Status} Body={Body}", endpoint, (int)response.StatusCode, responseBody);
+
         response.EnsureSuccessStatusCode();
-        return await response.Content.ReadAsStringAsync();
+        return responseBody;
     }
 
     public async Task<WmsBardossierResponse> SelectBardossierAsync(string barcode)
