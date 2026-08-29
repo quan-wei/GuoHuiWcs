@@ -1,6 +1,6 @@
 <!--
-  版本: 1.0
-  更新日期: 2026-08-13
+  版本: 1.1
+  更新日期: 2026-08-29
   说明: 国汇 WCS 系统全部接口文档，含库位管理、AGV 回调、PDA 及金蝶对接
 -->
 # 国汇 WCS 接口文档
@@ -137,7 +137,7 @@ POST /api/Location/release/{locationCode}
 
 ### 1.4 锁定库位
 
-将指定库位标记为禁用并锁定（Status=1，EnableFlag=false）。
+将指定库位标记为锁定（Status=1）。`locationCode` 按 `Location.Reserve5` 匹配。
 
 ```
 POST /api/Location/lock/{locationCode}
@@ -145,7 +145,17 @@ POST /api/Location/lock/{locationCode}
 
 | 参数 | 位置 | 类型 | 必填 | 说明 |
 |------|------|------|------|------|
-| `locationCode` | Path | `string` | 是 | 要锁定的库位编码 |
+| `locationCode` | Path | `string` | 是 | 要锁定的库位编码（对应 `Reserve5`） |
+
+**请求体**（可选）
+
+```json
+{ "Reason": "维修中" }
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| `Reason` | `string` | 否 | 锁定原因，仅记录，不影响锁定结果 |
 
 **成功响应** `200`
 
@@ -282,7 +292,7 @@ GET /api/Location/query-by-material/{code}
 
 ---
 
-### 1.8 查询金蝶出库通知单 &ensp; `[开发中]`
+### 1.8 查询金蝶出库通知单
 
 通过金蝶 View 接口查询出库通知单的详细信息。
 
@@ -326,7 +336,7 @@ GET /api/Location/query-delivery/{number}
 
 ---
 
-### 1.9 处理出库通知单 &ensp; `[开发中]`
+### 1.9 处理出库通知单
 
 根据出库通知单号，从金蝶获取单据 → 匹配托盘 → 生成出库队列任务。
 
@@ -373,7 +383,7 @@ POST /api/Location/process-delivery/{number}
 
 ### 2.1 AGV 任务状态回调
 
-接收 AGV 系统推送的机器人任务状态通知。
+接收 AGV 系统推送的机器人任务状态通知。`taskCode` 用于匹配 `queues.TaskName`，按 `method` 更新任务状态，`method` 不区分大小写。
 
 ```
 POST /agv/agvCallbackService/agvCallback
@@ -384,8 +394,8 @@ POST /agv/agvCallbackService/agvCallback
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `reqCode` | `string` | 否 | 请求编码 |
-| `method` | `string` | 否 | 方法名 |
-| `taskCode` | `string` | 否 | 任务编码 |
+| `method` | `string` | 是 | 状态方法：`start` / `begin` / `end` / `cancel` |
+| `taskCode` | `string` | 是 | 任务编码，对应 `queues.TaskName` |
 | `wbCode` | `string` | 否 | 工位编码 |
 | `podCode` | `string` | 否 | 货架编码 |
 
@@ -394,7 +404,7 @@ POST /agv/agvCallbackService/agvCallback
 ```json
 {
     "reqCode": "REQ001",
-    "method": "taskStatus",
+    "method": "end",
     "taskCode": "TASK-20260813-001",
     "wbCode": "WB01",
     "podCode": "POD01"
@@ -404,7 +414,7 @@ POST /agv/agvCallbackService/agvCallback
 **成功响应** `200`
 
 ```json
-{ "code": "0", "message": "0", "reqCode": "" }
+{ "code": "0", "message": "success", "reqCode": "REQ001" }
 ```
 
 **失败响应** `200`
@@ -413,14 +423,36 @@ POST /agv/agvCallbackService/agvCallback
 { "code": "1", "message": "Invalid JSON data", "reqCode": "" }
 ```
 
+**method 与状态映射**
 
+| method | 任务状态 | 库位动作 |
+|--------|---------|---------|
+| `start` | Status=1 | 释放起点库位 |
+| `begin` | Status=2 | 释放起点库位 |
+| `end` | Status=3 | 占用终点库位 |
+| `cancel` | Status=4 | 备注「任务取消」 |
+
+**其他响应场景**（均为 HTTP 200）
+
+| 场景 | 响应体 |
+|------|--------|
+| taskCode 为空 | `{ "code": "0", "message": "taskCode is empty", "reqCode": "REQ001" }` |
+| 未找到任务 | `{ "code": "0", "message": "task not found", "reqCode": "REQ001" }` |
+
+
+
+## 三、PDA 接口
+
+当前 `PDAController` 为脚手架占位，暂未提供对外业务接口，后续 PDA 交互接口在此基础上扩展。
+
+---
 
 ## 四、金蝶接口汇总
 
 | 接口 | 方法 | 路径 | 状态 |
 |------|------|------|------|
-| 查询出库通知单 | `GET` | `/api/Location/query-delivery/{number}` | `[开发中]` |
-| 处理出库通知单 | `POST` | `/api/Location/process-delivery/{number}` | `[开发中]` |
+| 查询出库通知单 | `GET` | `/api/Location/query-delivery/{number}` | 已实现 |
+| 处理出库通知单 | `POST` | `/api/Location/process-delivery/{number}` | 已实现 |
 
 两个金蝶接口均依赖 `KingdeeApiService` 通过 `Kingdee.BOS.WebApi.ServicesStub.DynamicFormService.View.common.kdsvc` 访问金蝶云星空，需要正确的登录配置（`Kingdee:BaseUrl`、`Kingdee:AcctId`、`Kingdee:UserName`、`Kingdee:Password`）。
 
@@ -455,3 +487,18 @@ POST /agv/agvCallbackService/agvCallback
 - 货架组规则：相邻两个货架编号为一组（奇数 N 与 N+1）
 - 地面库位仅用于中转，不参与存储分配
 - G 开头库位为出库中转位，重量校验为 0
+- 接口路径与请求体中的 `locationCode`、`StartPoint`、`EndPoint` 均对应 `Location.Reserve5`（库位业务编码），而非数据库主键
+
+---
+
+## 七、日志与报文记录
+
+系统已接入 NLog，接口收发报文统一记录，便于联调排查：
+
+| 日志文件 | 内容 |
+|---------|------|
+| `logs/report-{日期}.log` | 入站请求报文、WMS 出站请求/响应报文 |
+| `logs/{日期}.log` | 业务运行日志（含金蝶调用日志） |
+
+- 入站示例：`收到请求报文 Method=POST Path=/api/Location/allocate Body={...}`
+- 出站示例：`出站请求 Endpoint=wms_bardossier.select Body={...}`、`出站响应 Endpoint=wms_bardossier.select Status=200 Body={...}`

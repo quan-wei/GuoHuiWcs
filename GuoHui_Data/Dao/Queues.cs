@@ -9,9 +9,9 @@ namespace Models
     ///
     ///</summary>
     [SugarTable("queues")]
-    public partial class queues
+    public partial class Queues
     {
-           public queues(){
+           public Queues(){
 
 
            }

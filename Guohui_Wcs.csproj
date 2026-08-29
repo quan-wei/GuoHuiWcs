@@ -23,24 +23,10 @@
   </ItemGroup>
 
  <ItemGroup>
-   <Compile Remove="Guohui_Wcs\**" />
-   <Content Remove="Guohui_Wcs\**" />
-   <EmbeddedResource Remove="Guohui_Wcs\**" />
-   <None Remove="Guohui_Wcs\**" />
+   <Compile Remove="GuoHui_Data\**" />
+   <Content Remove="GuoHui_Data\**" />
+   <EmbeddedResource Remove="GuoHui_Data\**" />
+   <None Remove="GuoHui_Data\**" />
  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Remove="GuoHui_Data\**" />
-    <Content Remove="GuoHui_Data\**" />
-    <EmbeddedResource Remove="GuoHui_Data\**" />
-    <None Remove="GuoHui_Data\**" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <Compile Remove="Guohui_Test\**" />
-    <Content Remove="Guohui_Test\**" />
-    <EmbeddedResource Remove="Guohui_Test\**" />
-    <None Remove="Guohui_Test\**" />
-  </ItemGroup>
 
 </Project>

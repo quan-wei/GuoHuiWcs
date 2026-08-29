@@ -59,7 +59,7 @@ public class KingdeeApiService : IDisposable
         {
             var url = $"{_baseUrl}Kingdee.BOS.WebApi.ServicesStub.AuthService.ValidateUser.common.kdsvc";
             var json = JsonConvert.SerializeObject(new { acctID = acctId, username, password, lcid });
-            _logger.LogInformation("Kingdee login body: {Body}", json);
+            _logger.LogInformation("Kingdee login: acctId={AcctId}, username={Username}, password=***", acctId, username);
 
             using var request = new HttpRequestMessage(HttpMethod.Post, url);
             request.Headers.Add("Accept", "*/*");

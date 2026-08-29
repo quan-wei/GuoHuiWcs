@@ -12,11 +12,10 @@ namespace Guohui_Wcs.Controllers
     public class ReportController : Controller
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
-        private readonly ILogger<ReportController> _logger;
         [HttpPost("agvCallback")]
-        public  IActionResult UpdateGlobalVariableAsync([FromBody] RobotTaskNotification jsonData)
+        public IActionResult UpdateGlobalVariableAsync([FromBody] RobotTaskNotification jsonData)
         {
-            Logger.Info("AGV回调入参: {JsonData}", JsonSerializer.Serialize(jsonData));  // 加这行
+            Logger.Info("AGV回调入参: {JsonData}", JsonSerializer.Serialize(jsonData));
             if (jsonData == null)
             {
                 return Ok(new
@@ -26,16 +25,13 @@ namespace Guohui_Wcs.Controllers
                     reqCode = string.Empty
                 });
             }
-            else 
-            {
-                return Ok(new
-                {
-                    code = "0",
-                    message = "0",
-                    reqCode = string.Empty
-                });
-            }
 
+            return Ok(new
+            {
+                code = "0",
+                message = "0",
+                reqCode = string.Empty
+            });
         }
 
     }

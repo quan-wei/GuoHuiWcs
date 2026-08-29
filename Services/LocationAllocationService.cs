@@ -15,6 +15,11 @@ public class AllocationRequest
     public bool AllowUpperLevels { get; set; } = true;
 }
 
+public class LockRequest
+{
+    public string? Reason { get; set; }
+}
+
 public class AllocationResult
 {
     public bool Success { get; set; }
@@ -64,46 +69,47 @@ public class LocationAllocationService
 
         var pallNo = GeneratePallNo();
 
-        decimal? totalWeight = 0;
+        if (request.MaterNo == null || request.MaterNo.Count == 0)
+            return Fail("物料号不能为空");
+
+        decimal totalWeight = 0;
         var syncedBarcodes = new List<Barcode>();
 
-        if (request.MaterNo != null)
+        foreach (var code in request.MaterNo)
         {
-            foreach (var code in request.MaterNo)
+            var result = await _apiClient.SyncBardossierToDbAsync(code);
+            if (result != null)
             {
-                var result = await _apiClient.SyncBardossierToDbAsync(code);
-                if (result != null)
-                {
-                    syncedBarcodes.Add(result);
-                    totalWeight += result.AuxQty;
-                }
+                syncedBarcodes.Add(result);
+                totalWeight += result.AuxQty ?? 0;
             }
         }
-        else
-        {
-            return Fail("物料号不能为空");
-        }
-            // 插入 PallMater 记录
-            var pallMater = new PallMater
-            {
-                PallNo = pallNo,
-                Weight = totalWeight,
-                CreateTime = DateTime.Now
-            };
 
-        for (int i = 0; i < syncedBarcodes.Count && i < 6; i++)
+        // 插入 PallMater 记录
+        var pallMater = new PallMater
+        {
+            PallNo = pallNo,
+            Weight = totalWeight,
+            CreateTime = DateTime.Now
+        };
+
+        for (int i = 0; i < syncedBarcodes.Count && i < 15; i++)
         {
             var bc = syncedBarcodes[i];
-            switch (i)
+            var index = i + 1;
+
+            var subTitleProp = typeof(PallMater).GetProperty($"SubTitle{index}");
+            var weighProp = typeof(PallMater).GetProperty($"Weigh{index}");
+
+            if (subTitleProp != null && weighProp != null)
             {
-                case 0: pallMater.SubTitle1 = bc.Number; pallMater.Weigh1 = bc.Qty; break;
-                case 1: pallMater.SubTitle2 = bc.Number; pallMater.Weigh2 = bc.Qty; break;
-                case 2: pallMater.SubTitle3 = bc.Number; pallMater.Weigh3 = bc.Qty; break;
-                case 3: pallMater.SubTitle4 = bc.Number; pallMater.Weigh4 = bc.Qty; break;
-                case 4: pallMater.SubTitle5 = bc.Number; pallMater.Weigh5 = bc.Qty; break;
-                case 5: pallMater.SubTitle6 = bc.Number; pallMater.Weigh6 = bc.Qty; break;
+                subTitleProp.SetValue(pallMater, bc.Number);
+                weighProp.SetValue(pallMater, bc.Qty);
             }
         }
+
+
+
         if (totalWeight <= 0)
         {
             return Fail("重量异常");
@@ -187,28 +193,34 @@ public class LocationAllocationService
                 CreateTime = DateTime.Now
             };
 
-            for (int i = 0; i < syncedBarcodes.Count && i < 6; i++)
+            for (int i = 0; i < syncedBarcodes.Count && i < 15; i++)
             {
                 var bc = syncedBarcodes[i];
-                switch (i)
+                var index = i + 1;
+
+                var subTitleProp = typeof(PallMater).GetProperty($"SubTitle{index}");
+                var weighProp = typeof(PallMater).GetProperty($"Weigh{index}");
+
+                if (subTitleProp != null && weighProp != null)
                 {
-                    case 0: pallMater.SubTitle1 = bc.Number; pallMater.Weigh1 = bc.Qty; break;
-                    case 1: pallMater.SubTitle2 = bc.Number; pallMater.Weigh2 = bc.Qty; break;
-                    case 2: pallMater.SubTitle3 = bc.Number; pallMater.Weigh3 = bc.Qty; break;
-                    case 3: pallMater.SubTitle4 = bc.Number; pallMater.Weigh4 = bc.Qty; break;
-                    case 4: pallMater.SubTitle5 = bc.Number; pallMater.Weigh5 = bc.Qty; break;
-                    case 5: pallMater.SubTitle6 = bc.Number; pallMater.Weigh6 = bc.Qty; break;
+                    subTitleProp.SetValue(pallMater, bc.Number);
+                    weighProp.SetValue(pallMater, bc.Qty);
                 }
             }
+
+            if (!CanPlace(loc, totalWeight))
+                return Fail("所在货架对已超重限制");
+
+            // 与 Allocate 保持一致：库位分配成功后才落库 PallMater，避免失败路径留下孤儿记录
+            var allocationResult = TryAllocate(loc, pallNo, totalWeight);
+            if (!allocationResult.Success)
+                return allocationResult;
 
             _db.Insertable(pallMater).ExecuteCommand();
             _logger.LogInformation("PallMater created: {PallNo}, weight: {Weight}, from: {Start}, to: {End}",
                 pallNo, totalWeight, request.StartPoint, locationCode);
 
-            if (!CanPlace(loc, totalWeight))
-                return Fail("所在货架对已超重限制");
-
-            return TryAllocate(loc, pallNo, totalWeight);
+            return allocationResult;
         }
         else
         {
@@ -228,7 +240,7 @@ public class LocationAllocationService
                 TotalWeight = null,
                 UpdateTime = DateTime.Now
             })
-            .Where(l => l.Reserve5 == locationCode && l.Status == 1)
+            .Where(l => l.Reserve5 == locationCode && l.Status != 0)
             .ExecuteCommand();
 
         return rows > 0
@@ -385,32 +397,228 @@ public class LocationAllocationService
     private string GeneratePallNo()
     {
         var today = DateTime.Now.ToString("yyyyMMdd");
+        var sequence = IncrementSequence(today);
+        return $"PALL{today}{sequence:D4}";
+    }
 
-        var existing = _db.Queryable<serialsequence>()
-            .Where(s => s.SerialDate == today)
-            .First();
+    /// <summary>
+    /// 原子递增当日序号并返回新值，避免"先查后改"在并发下生成重复的 PallNo。
+    /// </summary>
+    private int IncrementSequence(string today)
+    {
+        const string updateSql = """
+            UPDATE serialsequence
+            SET CurrentSequence = ISNULL(CurrentSequence, 0) + 1
+            OUTPUT inserted.CurrentSequence
+            WHERE SerialDate = @date
+            """;
 
-        int sequence;
-        if (existing != null)
+        var updated = _db.Ado.SqlQuery<int>(updateSql, new SugarParameter("@date", today));
+        if (updated.Count > 0)
+            return updated[0];
+
+        try
         {
-            sequence = (existing.CurrentSequence ?? 0) + 1;
-            _db.Updateable<serialsequence>()
-                .SetColumns(s => new serialsequence { CurrentSequence = sequence })
-                .Where(s => s.SerialDate == today)
-                .ExecuteCommand();
-        }
-        else
-        {
-            sequence = 1;
-            _db.Insertable(new serialsequence
+            _db.Insertable(new SerialSequence
             {
                 SerialDate = today,
                 CurrentSequence = 1
             }).ExecuteCommand();
+            return 1;
+        }
+        catch
+        {
+            // 当日记录已被并发请求插入，主键冲突，重走递增取号
+            var retried = _db.Ado.SqlQuery<int>(updateSql, new SugarParameter("@date", today));
+            if (retried.Count > 0)
+                return retried[0];
+            throw;
+        }
+    }
+    public AllocationResult LockLocation(string locationCode)
+    {
+        var loc = _db.Queryable<Location>()
+            .Where(l => l.Reserve5 == locationCode)
+            .First();
+
+        if (loc == null)
+            return Fail("库位不存在");
+
+        var rows = _db.Updateable<Location>()
+            .SetColumns(l => new Location
+            {
+                Status = 1,
+                UpdateTime = DateTime.Now
+            })
+            .Where(l => l.Reserve5 == locationCode)
+            .ExecuteCommand();
+
+        return rows > 0
+            ? new AllocationResult { Success = true, Message = "库位已锁定" }
+            : Fail("库位锁定失败");
+    }
+
+    public Location? GetLocationByReserve5(string reserve5)
+    {
+        return _db.Queryable<Location>()
+            .Where(l => l.Reserve5 == reserve5)
+            .First();
+    }
+
+    public LocationDetailResult? GetLocationDetailByBarcode(string barcode)
+    {
+        var loc = _db.Queryable<Location>()
+            .Where(l => l.Reserve5 == barcode)
+            .First();
+
+        if (loc == null)
+            return null;
+
+        var detail = new LocationDetailResult
+        {
+            LocationCode = loc.LocationCode,
+            LocationType = loc.LocationType,
+            ShelfCode = loc.ShelfCode,
+            Status = loc.Status,
+            StatusText = loc.Status == 0 ? "空闲" : "有货",
+            PallNo = loc.PallNo,
+            TotalWeight = loc.TotalWeight,
+            LimitWeight = loc.LimitWeightt,
+            Reserve5 = loc.Reserve5,
+            EnableFlag = loc.EnableFlag
+        };
+
+        if (string.IsNullOrEmpty(loc.PallNo))
+            return detail;
+
+        var pallMater = _db.Queryable<PallMater>()
+            .Where(p => p.PallNo == loc.PallNo)
+            .First();
+
+        if (pallMater == null)
+            return detail;
+
+        var slots = new (string?, decimal?)[]
+        {
+            (pallMater.SubTitle1, pallMater.Weigh1),
+            (pallMater.SubTitle2, pallMater.Weigh2),
+            (pallMater.SubTitle3, pallMater.Weigh3),
+            (pallMater.SubTitle4, pallMater.Weigh4),
+            (pallMater.SubTitle5, pallMater.Weigh5),
+            (pallMater.SubTitle6, pallMater.Weigh6),
+            (pallMater.SubTitle7, pallMater.Weigh7),
+            (pallMater.SubTitle8, pallMater.Weigh8),
+            (pallMater.SubTitle9, pallMater.Weigh9),
+            (pallMater.SubTitle10, pallMater.Weigh10),
+            (pallMater.SubTitle11, pallMater.Weigh11),
+            (pallMater.SubTitle12, pallMater.Weigh12),
+            (pallMater.SubTitle13, pallMater.Weigh13),
+            (pallMater.SubTitle14, pallMater.Weigh14),
+            (pallMater.SubTitle15, pallMater.Weigh15),
+        };
+
+        var products = new List<LocationProductInfo>();
+        foreach (var (subTitle, weight) in slots)
+        {
+            if (string.IsNullOrEmpty(subTitle)) continue;
+
+            var barcodeInfo = _db.Queryable<Barcode>()
+                .Where(b => b.Number == subTitle)
+                .First();
+
+            products.Add(new LocationProductInfo
+            {
+                Barcode = subTitle,
+                Weight = weight,
+                MaterialNo = barcodeInfo?.MaterialNo,
+                MaterialName = barcodeInfo?.MaterialName,
+                MaterialModel = barcodeInfo?.MaterialModel,
+                Qty = barcodeInfo?.AuxQty
+            });
         }
 
-        return $"PALL{today}{sequence:D4}";
+        detail.Products = products;
+        return detail;
     }
+
+    public List<QueryByNoItem> QueryLocationsByMaterial(string code)
+    {
+        const string sql = """
+            SELECT
+                LocationCode,
+                Reserve5,
+                LocationType,
+                LimitWeightt,
+                TotalWeight,
+                PallNo,
+                PallWeight,
+                BarcodeNumber,
+                CustomerName,
+                BarType,
+                Qty,
+                AuxQty,
+                WarehouseName,
+                MaterialNo,
+                MaterialName,
+                SubTitleIndex,
+                SubTitleValue,
+                CorrespondingWeight
+            FROM [dbo].[querybyno]
+            WHERE SubTitleValue LIKE @pattern + '%'
+            ORDER BY PallNo, SubTitleIndex
+            """;
+
+        return _db.Ado.SqlQuery<QueryByNoItem>(sql, new SugarParameter("@pattern", code));
+    }
+
     private static AllocationResult Fail(string message) =>
         new AllocationResult { Success = false, Message = message };
+}
+
+public class LocationDetailResult
+{
+    public bool Success { get; set; } = true;
+    public string? LocationCode { get; set; }
+    public string? LocationType { get; set; }
+    public string? ShelfCode { get; set; }
+    public byte Status { get; set; }
+    public string StatusText { get; set; } = "";
+    public string? PallNo { get; set; }
+    public decimal? TotalWeight { get; set; }
+    public decimal? LimitWeight { get; set; }
+    public string? Reserve5 { get; set; }
+    public bool? EnableFlag { get; set; }
+    public List<LocationProductInfo>? Products { get; set; }
+}
+
+public class LocationProductInfo
+{
+    public string? Barcode { get; set; }
+    public decimal? Weight { get; set; }
+    public string? MaterialNo { get; set; }
+    public string? MaterialName { get; set; }
+    public string? MaterialModel { get; set; }
+    public decimal? Qty { get; set; }
+}
+
+public class QueryByNoItem
+{
+    public string? LocationCode { get; set; }
+    public string? Reserve5 { get; set; }
+    public string? LocationType { get; set; }
+    public decimal? LimitWeightt { get; set; }
+    public decimal? TotalWeight { get; set; }
+    public string? PallNo { get; set; }
+    public decimal? PallWeight { get; set; }
+    public string? BarcodeNumber { get; set; }
+    public string? CustomerName { get; set; }
+    public string? BarType { get; set; }
+    public decimal? Qty { get; set; }
+    public decimal? AuxQty { get; set; }
+    public string? WarehouseName { get; set; }
+    public string? MaterialNo { get; set; }
+    public string? MaterialName { get; set; }
+    public int? SubTitleIndex { get; set; }
+    public string? SubTitleValue { get; set; }
+    public decimal? CorrespondingWeight { get; set; }
 }

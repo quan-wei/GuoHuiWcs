@@ -9,9 +9,9 @@ namespace Models
     ///
     ///</summary>
     [SugarTable("serialsequence")]
-    public partial class serialsequence
+    public partial class SerialSequence
     {
-           public serialsequence(){
+           public SerialSequence(){
 
 
            }

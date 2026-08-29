@@ -81,7 +81,7 @@ public class DeliveryOrderService
             foreach (var pallet in pallets)
             {
                 var taskName = $"OUT-{deliveryNo}-{entry.Seq}-{pallet.PallNo}";
-                var queue = new queues
+                var queue = new Queues
                 {
                     TaskName = taskName,
                     PallNo = pallet.PallNo,

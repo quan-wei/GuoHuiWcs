@@ -1,19 +1,19 @@
-﻿using Guohui_Wcs.Entity;
+using Guohui_Wcs.Entity;
 using Guohui_Wcs.Utils;
 using Newtonsoft.Json;
 using NLog;
 
-namespace Guohui_Wcs.Helper.AgvOrderHleper
+namespace Guohui_Wcs.Utils.AGVUtils
 {
     public class AGVOrderHelper
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
 
-        public string BaseUrl { get; set; }
+        public string BaseUrl { get; }
 
         public AGVOrderHelper(string baseUrl)
         {
-            this.BaseUrl = "http://" + baseUrl;
+            BaseUrl = "http://" + baseUrl;
         }
         /// <summary>
         /// 创建任务
@@ -32,6 +32,7 @@ namespace Guohui_Wcs.Helper.AgvOrderHleper
                 taskTyp="F11",
                 ctnrTyp="1",
                 priority="1",
+                taskCode= guid.ToString("N"),
                 positionCodePath = new[]
                 {
         new {

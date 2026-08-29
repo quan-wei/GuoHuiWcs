@@ -1,5 +1,7 @@
 ﻿using GuoHui_Data.DaoEntity;
 using Guohui_Wcs.Services;
+using Guohui_Wcs.Utils.AGVUtils;
+using Microsoft.AspNetCore.Diagnostics;
 using NLog;
 using NLog.Web;
 using System.Text;
@@ -28,8 +30,29 @@ builder.Services.AddHttpClient<ApiClientService>();
 builder.Services.AddScoped<LocationAllocationService>();
 builder.Services.AddSingleton<KingdeeApiService>();
 builder.Services.AddScoped<DeliveryOrderService>();
+builder.Services.AddSingleton(_ => new AGVOrderHelper(
+    builder.Configuration.GetValue<string>("Agv:BaseUrl")
+    ?? throw new InvalidOperationException("缺少配置 Agv:BaseUrl")));
 
 var app = builder.Build();
+
+var requestLogger = LogManager.GetLogger("RequestLogger");
+
+// 全局异常处理：未捕获异常统一记录日志并返回 { Success, Message } 结构
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        var feature = context.Features.Get<IExceptionHandlerFeature>();
+        requestLogger.Error(feature?.Error, "未处理异常 {Path}", context.Request.Path);
+        var jsonOptions = context.RequestServices
+            .GetRequiredService<Microsoft.AspNetCore.Mvc.JsonOptions>()
+            .JsonSerializerOptions;
+        await context.Response.WriteAsJsonAsync(
+            new { Success = false, Message = "服务器内部错误，请查看服务端日志" }, jsonOptions);
+    });
+});
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -40,7 +63,6 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-var requestLogger = LogManager.GetLogger("RequestLogger");
 app.Use(async (context, next) =>
 {
     context.Request.EnableBuffering();
