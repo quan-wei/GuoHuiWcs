@@ -336,17 +336,17 @@ GET /api/Location/query-delivery/{number}
 
 ---
 
-### 1.9 处理出库通知单
+### 1.9 处理出库通知单 
 
-根据出库通知单号，从金蝶获取单据 → 匹配托盘 → 生成出库队列任务。
+根据出库通知单号，从金蝶获取单据 → 匹配托盘 → 生成出库任务信息供客户确认。
 
 ```
 POST /api/Location/process-delivery/{number}
 ```
 
-| 参数 | 位置 | 类型 | 必填 | 说明 |
-|------|------|------|------|------|
-| `number` | Path | `string` | 是 | 金蝶出库通知单单据号 |
+| 参数     | 位置 | 类型     | 必填 | 说明                 |
+| -------- | ---- | -------- | ---- | -------------------- |
+| `number` | Path | `string` | 是   | 金蝶出库通知单单据号 |
 
 **成功响应** `200`
 
@@ -374,6 +374,49 @@ POST /api/Location/process-delivery/{number}
 2. 遍历分录行，通过 `Barcode.MaterialNo` 匹配物料编码
 3. 在 `PallMater` 的 `SubTitle1~SubTitle6` 中查找匹配的托盘
 4. 为每个匹配的托盘生成 `queues` 出库任务（Type=出库，Status=0）
+
+---
+
+### 1.10 回发出库任务信息生成队列任务 
+
+   根据出库任务信息，生成出库队列任务并发给AGV。
+
+   ```
+POST /api/Location/delivery-queues
+   ```
+
+**请求体**
+
+| 字段           | 类型     | 必填 | 说明       |
+| -------------- | -------- | ---- | ---------- |
+| `TaskName`     | `string` | 否   | 任务名称   |
+| `PallNo`       | `string` | 否   | 托盘编码   |
+| `MaterialCode` | `string` | 否   | 物料编码   |
+| `LocationCode` | `string` | 否   | 货架编码   |
+| `Seq`          | `string` | 否   | 分录单行号 |
+
+**请求示例**
+
+```json
+[
+    {
+        "TaskName": "OUT-SALOUT-2026-001-1-PALL202608060001",
+        "PallNo": "PALL202608060001",
+        "MaterialCode": "MAT-001",
+        "LocationCode": "A01-01-01",
+        "Seq": 1
+    }
+]
+```
+
+**成功响应** `200`
+
+   ```json
+{
+    "Success": true,
+    "Message": "任务执行成功"
+}
+   ```
 
 ---
 

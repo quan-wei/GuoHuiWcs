@@ -1,7 +1,9 @@
+using GuoHui_Data.DaoEntity;
 using Guohui_Wcs.Models.Kingdee;
 using Guohui_Wcs.Services;
 using Guohui_Wcs.Utils.AGVUtils;
 using Microsoft.AspNetCore.Mvc;
+using Models;
 
 namespace Guohui_Wcs.Controllers;
 
@@ -148,6 +150,55 @@ public class LocationController : ControllerBase
         if (!result.Success)
             return BadRequest(result);
         return Ok(result);
+    }
+
+    [HttpPost("delivery-queues")]
+    public async Task<IActionResult> DeliveryQueues([FromBody] List<DeliveryTaskInfo> tasks)
+    {
+        try
+        {
+            var errorMsg = "";
+
+            var result = await _deliveryService.CreatQueues(tasks);
+
+            if (result.Count > 0)
+            {
+                foreach (var item in result)
+                {
+                    var target = new List<string> { item.GetLocation!, item.PutLocation! };
+                    var agvResult = _agvOrder.CreateTask(target);
+
+                    if (agvResult == null || agvResult.Code != "0")
+                    {
+                        var errMsg = agvResult?.Message ?? "AGV系统无响应";
+                        _logger.LogError("AGV任务创建失败: {Message}", errMsg);
+                        errorMsg += $"AGV搬运任务创建失败: {errMsg}";
+                    }
+
+                    //var rRows = Model_Data.Db.Updateable<Location>()
+                    //    .SetColumns(l => new Location
+                    //    {
+                    //        Status = 0,
+                    //        UpdateTime = DateTime.Now
+                    //    })
+                    //    .Where(l => l.LocationCode == item.GetLocation)
+                    //    .ExecuteCommand();
+                    var lRows = Model_Data.Db.Updateable<Location>()
+                        .SetColumns(l => new Location
+                        {
+                            Status = 1,
+                            UpdateTime = DateTime.Now
+                        })
+                        .Where(l => l.LocationCode == item.PutLocation)
+                        .ExecuteCommand();
+                }
+            }
+            return Ok(new AllocationResult { Success = true, Message = !string.IsNullOrWhiteSpace(errorMsg) ? errorMsg : "任务执行成功" });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new AllocationResult { Success = false, Message = ex.Message });
+        }
     }
 
     [HttpGet("query-by-barcode/{barcode}")]

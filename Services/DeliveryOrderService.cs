@@ -1,5 +1,4 @@
-﻿using Guohui_Wcs.Models.Kingdee;
-using GuoHui_Data.DaoEntity;
+using Guohui_Wcs.Models.Kingdee;
 using Models;
 using SqlSugar;
 
@@ -13,6 +12,17 @@ public class DeliveryOrderService
     private readonly KingdeeApiService _kingdeeApi;
     private readonly SqlSugarScope _db;
     private readonly ILogger<DeliveryOrderService> _logger;
+
+    public class QtyObject
+    {
+        //已有库存张数集合
+        public decimal? qty { get; set; }
+
+        //已有库存张数集合数量
+        public int? qtyCount { get; set; }
+    }
+
+    public List<Dictionary<decimal, int>> resultList = new List<Dictionary<decimal, int>>();
 
     public DeliveryOrderService(KingdeeApiService kingdeeApi, SqlSugarScope db, ILogger<DeliveryOrderService> logger)
     {
@@ -30,6 +40,8 @@ public class DeliveryOrderService
         var response = await _kingdeeApi.ViewAsync<KingdeeDeliveryNotice>("SAL_DELIVERYNOTICE", deliveryNo);
         if (response == null || !response.Result.ResponseStatus.IsSuccess)
             return new DeliveryProcessResult { Success = false, Message = "金蝶查询失败，请检查单据号或登录配置" };
+        //var json = File.ReadAllText("D:\\code\\国辉仓控\\64dc9982-2f88-4b57-b289-19cb7bae6e7a.json");
+        //var response = JsonConvert.DeserializeObject<KingdeeViewResponse<KingdeeDeliveryNotice>>(json);
 
         var notice = response.Result.Data!;
         if (notice.Entries == null || notice.Entries.Count == 0)
@@ -48,10 +60,10 @@ public class DeliveryOrderService
                 continue;
             }
 
-            // 通过 Barcode.MaterialNo 找到对应的条码号
-            var barcodeNumbers = await _db.Queryable<Barcode>()
-                .Where(b => b.MaterialNo == materialCode)
-                .Select(b => b.Number)
+            //找出物料对应的所有托盘
+            var barcodeNumbers = await _db.Queryable<QueryByNo>()
+                .Where(t => t.MaterialNo == materialCode)
+                .OrderBy(t => t.BarcodeNumber)
                 .ToListAsync();
 
             if (barcodeNumbers.Count == 0)
@@ -60,48 +72,85 @@ public class DeliveryOrderService
                 continue;
             }
 
-            // 在 PallMater 的 SubTitle1~SubTitle6 中匹配条码号
-            var pallets = await _db.Queryable<PallMater>()
-                .Where(p =>
-                    barcodeNumbers.Contains(p.SubTitle1!) ||
-                    barcodeNumbers.Contains(p.SubTitle2!) ||
-                    barcodeNumbers.Contains(p.SubTitle3!) ||
-                    barcodeNumbers.Contains(p.SubTitle4!) ||
-                    barcodeNumbers.Contains(p.SubTitle5!) ||
-                    barcodeNumbers.Contains(p.SubTitle6!))
-                .ToListAsync();
+            //计算总张数
+            var totalQty = barcodeNumbers.Sum(t => t.Qty);
 
-            if (pallets.Count == 0)
+            //库存相等
+            if (totalQty == entry.Qty)
             {
-                errors.Add($"分录行 {entry.Seq}: 物料 {materialCode} 未找到对应托盘");
-                continue;
+                // 3. 为每个匹配的托盘生成队列任务
+                foreach (var pallet in barcodeNumbers)
+                {
+                    var taskName = $"OUT-{deliveryNo}-{entry.Seq}-{pallet.PallNo}";
+
+                    createdTasks.Add(new DeliveryTaskInfo
+                    {
+                        TaskName = taskName,
+                        PallNo = pallet.PallNo,
+                        MaterialCode = materialCode,
+                        LocationCode = pallet.LocationCode,
+                        Seq = entry.Seq
+                    });
+                }
             }
-
-            // 3. 为每个匹配的托盘生成队列任务
-            foreach (var pallet in pallets)
+            //库存不足
+            else if (totalQty < entry.Qty)
             {
-                var taskName = $"OUT-{deliveryNo}-{entry.Seq}-{pallet.PallNo}";
-                var queue = new Queues
+                // 3. 为每个匹配的托盘生成队列任务
+                foreach (var pallet in barcodeNumbers)
                 {
-                    TaskName = taskName,
-                    PallNo = pallet.PallNo,
-                    Type = "出库",
-                    GetLocation = pallet.LocationCode ?? "",
-                    PutLocation = "",
-                    Status = "0",
-                    CreateTime = DateTime.Now
-                };
+                    var taskName = $"OUT-{deliveryNo}-{entry.Seq}-{pallet.PallNo}";
 
-                await _db.Insertable(queue).ExecuteCommandAsync();
+                    createdTasks.Add(new DeliveryTaskInfo
+                    {
+                        TaskName = taskName,
+                        PallNo = pallet.PallNo,
+                        MaterialCode = materialCode,
+                        LocationCode = pallet.LocationCode,
+                        Seq = entry.Seq
+                    });
+                }
 
-                createdTasks.Add(new DeliveryTaskInfo
+                errors.Add($"分录行 {entry.Seq}: 物料 {materialCode} 库存不足，库存数量 {totalQty} ，确认需要出库吗");
+            }
+            //库存充足
+            else
+            {
+                var currentComb = new Dictionary<decimal, int>();
+                var queryQties = barcodeNumbers.GroupBy(t => t.Qty).Select(t => new QtyObject { qty = t.Key, qtyCount = t.Count() }).ToList();
+
+                TryFindComb(queryQties, entry.Qty, 0, 0, currentComb);
+
+                if (resultList.Count > 0)
                 {
-                    TaskName = taskName,
-                    PallNo = pallet.PallNo,
-                    MaterialCode = materialCode,
-                    LocationCode = pallet.LocationCode,
-                    Seq = entry.Seq
-                });
+                    foreach (var item in resultList[1])
+                    {
+                        var qty = item.Key;
+                        var qtyCount = item.Value;
+
+                        var fiterBarcodeNumbers = barcodeNumbers.Where(t => t.Qty == qty).Take(qtyCount).ToList();
+
+                        // 3. 为每个匹配的托盘生成队列任务
+                        foreach (var pallet in fiterBarcodeNumbers)
+                        {
+                            var taskName = $"OUT-{deliveryNo}-{entry.Seq}-{pallet.PallNo}";
+
+                            createdTasks.Add(new DeliveryTaskInfo
+                            {
+                                TaskName = taskName,
+                                PallNo = pallet.PallNo,
+                                MaterialCode = materialCode,
+                                LocationCode = pallet.LocationCode,
+                                Seq = entry.Seq
+                            });
+                        }
+                    }
+                }
+                else
+                {
+                    errors.Add($"分录行 {entry.Seq}: 物料 {materialCode} 未匹配到合适的张数，请手动出库拆分");
+                }
+
             }
         }
 
@@ -113,6 +162,87 @@ public class DeliveryOrderService
             Tasks = createdTasks,
             Errors = errors
         };
+    }
+
+    /// <summary>
+    /// 
+    /// </summary>
+    /// <param name="target"></param>
+    /// <param name="sum"></param>
+    /// <param name="index"></param>
+    public void TryFindComb(List<QtyObject> qtyObjects, decimal target, decimal sum, int index, Dictionary<decimal, int> currentComb)
+    {
+        if (sum == target)
+        {
+            resultList.Add(new Dictionary<decimal, int>(currentComb));
+            return;
+        }
+        if (index >= qtyObjects.Count || sum > target)
+        {
+            return;
+        }
+
+        var qtyObject = qtyObjects[index];
+        for (int i = 0; i <= qtyObject.qtyCount; i++)
+        {
+            if (i > 0)
+            {
+                if (!currentComb.ContainsKey(qtyObject.qty.GetValueOrDefault()))
+                {
+                    currentComb[qtyObject.qty.GetValueOrDefault()] = i;
+                }
+                else
+                {
+                    currentComb[qtyObject.qty.GetValueOrDefault()] += i;
+                }
+            }
+            TryFindComb(qtyObjects, target, sum + qtyObject.qty.GetValueOrDefault() * i, index + 1, currentComb);
+            if (i > 0)
+            {
+                if (currentComb[qtyObject.qty.GetValueOrDefault()] <= i)
+                {
+                    currentComb.Remove(qtyObject.qty.GetValueOrDefault());
+                }
+                else
+                {
+                    currentComb[qtyObject.qty.GetValueOrDefault()] -= i;
+                }
+            }
+        }
+    }
+
+    public async Task<List<Queues>> CreatQueues(List<DeliveryTaskInfo> infos)
+    {
+        var createdTasks = new List<Queues>();
+
+        if (infos != null && infos.Count > 0)
+        {
+            var loc = _db.Queryable<Location>().Where(t => t.Reserve5.StartsWith("G") && t.Status == 0 && t.EnableFlag == true).ToList();
+
+            if (loc == null || loc.Count == 0)
+            {
+                throw new Exception("没有空闲的地面库位");
+            }
+
+            for (var i = 0; i < (infos.Count > loc.Count ? loc.Count : infos.Count); i++)
+            {
+                var queue = new Queues
+                {
+                    TaskName = infos[i].TaskName,
+                    PallNo = infos[i].PallNo,
+                    Type = "出库",
+                    GetLocation = infos[i].LocationCode ?? "",
+                    PutLocation = loc[i].LocationCode,
+                    Status = "0",
+                    CreateTime = DateTime.Now
+                };
+
+                await _db.Insertable(queue).ExecuteCommandAsync();
+
+                createdTasks.Add(queue);
+            }
+        }
+        return createdTasks;
     }
 }
 
