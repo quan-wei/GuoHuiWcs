@@ -1,8 +1,7 @@
-using GuoHui_Data.DaoEntity;
 using Guohui_Wcs.Models;
+using Guohui_Wcs.Services;
 using Microsoft.AspNetCore.Mvc;
 using NLog;
-using System.Net.Sockets;
 using System.Text.Json;
 
 namespace Guohui_Wcs.Controllers
@@ -12,8 +11,15 @@ namespace Guohui_Wcs.Controllers
     public class ReportController : Controller
     {
         private static readonly Logger Logger = LogManager.GetCurrentClassLogger();
+        private readonly LocationAllocationService _allocationService;
+
+        public ReportController(LocationAllocationService allocationService)
+        {
+            _allocationService = allocationService;
+        }
+
         [HttpPost("agvCallback")]
-        public IActionResult UpdateGlobalVariableAsync([FromBody] RobotTaskNotification jsonData)
+        public IActionResult AgvCallback([FromBody] RobotTaskNotification jsonData)
         {
             Logger.Info("AGV回调入参: {JsonData}", JsonSerializer.Serialize(jsonData));
             if (jsonData == null)
@@ -26,13 +32,31 @@ namespace Guohui_Wcs.Controllers
                 });
             }
 
+            var method = jsonData.Method ?? string.Empty;
+            var taskCode = jsonData.TaskCode ?? string.Empty;
+            var wbCode = jsonData.WbCode ?? string.Empty;
+
+            Logger.Info("AGV回调 method={Method} taskCode={TaskCode} wbCode={WbCode}", method, taskCode, wbCode);
+
+            if (string.IsNullOrEmpty(taskCode))
+            {
+                Logger.Warn("AGV回调 taskCode 为空");
+                return Ok(new
+                {
+                    code = "0",
+                    message = "taskCode is empty",
+                    reqCode = jsonData.ReqCode ?? string.Empty
+                });
+            }
+
+            var message = _allocationService.HandleAgvCallback(method, taskCode, wbCode);
+
             return Ok(new
             {
                 code = "0",
-                message = "0",
-                reqCode = string.Empty
+                message,
+                reqCode = jsonData.ReqCode ?? string.Empty
             });
         }
-
     }
 }

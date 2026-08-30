@@ -44,7 +44,7 @@ public class LocationController : ControllerBase
         }
 
         var target = new List<string> { startPoint.LocationCode, result.LocationCode! };
-        var agvResult = _agvOrder.CreateTask(target);
+        var agvResult = _agvOrder.CreateTask(target, result.TaskName);
 
         if (agvResult == null || agvResult.Code != "0")
         {
@@ -54,7 +54,7 @@ public class LocationController : ControllerBase
             return BadRequest(new { Success = false, Message = $"AGV搬运任务创建失败: {errMsg}" });
         }
 
-        _allocationService.Release(startPoint.Reserve5!);
+        // 起点库位不在此处释放，由 AGV start/begin 回调统一释放
         return Ok(result);
     }
 
@@ -73,7 +73,7 @@ public class LocationController : ControllerBase
         }
 
         var target = new List<string> { startPoint.LocationCode, result.LocationCode! };
-        var agvResult = _agvOrder.CreateTask(target);
+        var agvResult = _agvOrder.CreateTask(target, result.TaskName);
 
         if (agvResult == null || agvResult.Code != "0")
         {
@@ -83,7 +83,7 @@ public class LocationController : ControllerBase
             return BadRequest(new { Success = false, Message = $"AGV搬运任务创建失败: {errMsg}" });
         }
 
-        _allocationService.Release(startPoint.Reserve5!);
+        // 起点库位不在此处释放，由 AGV start/begin 回调统一释放
         return Ok(result);
     }
 

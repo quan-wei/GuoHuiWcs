@@ -28,6 +28,7 @@ public class AllocationResult
     public string? LocationType { get; set; }
     public decimal? WeightKg { get; set; }
     public string? PallNo { get; set; }
+    public string? TaskName { get; set; }
 }
 
 public class GroupLoadInfo
@@ -140,6 +141,7 @@ public class LocationAllocationService
         if (allocationResult.Success)
         {
             _db.Insertable(pallMater).ExecuteCommand();
+            allocationResult.TaskName = RecordInboundQueue(pallNo, request.StartPoint, allocationResult.LocationCode!);
             _logger.LogInformation("PallMater created: {PallNo}, weight: {Weight}", pallNo, totalWeight);
         }
 
@@ -217,6 +219,7 @@ public class LocationAllocationService
                 return allocationResult;
 
             _db.Insertable(pallMater).ExecuteCommand();
+            allocationResult.TaskName = RecordInboundQueue(pallNo, request.StartPoint, loc.LocationCode);
             _logger.LogInformation("PallMater created: {PallNo}, weight: {Weight}, from: {Start}, to: {End}",
                 pallNo, totalWeight, request.StartPoint, locationCode);
 
@@ -227,7 +230,11 @@ public class LocationAllocationService
             decimal totalWeight = 0;
             _logger.LogInformation("Outlocate {PallNo}, weight: {Weight}, from: {Start}, to: {End}",
                 pallNo, totalWeight, request.StartPoint, locationCode);
-            return TryAllocate(loc, pallNo, totalWeight);
+
+            var allocationResult = TryAllocate(loc, pallNo, totalWeight);
+            if (allocationResult.Success)
+                allocationResult.TaskName = $"OUT-{pallNo}";
+            return allocationResult;
         }
     }
     public AllocationResult Release(string locationCode)
@@ -250,7 +257,134 @@ public class LocationAllocationService
 
     public void RollbackAllocation(string locationCode, string pallNo)
     {
-        _db.Updateable<Location>()
+        RollbackDestination(locationCode, pallNo);
+
+        _db.Deleteable<Queues>()
+            .Where(q => q.PallNo == pallNo && q.Type == "入库")
+            .ExecuteCommand();
+
+        _logger.LogWarning("AGV任务失败，已回滚库位 {Location} 和托盘 {PallNo}", locationCode, pallNo);
+    }
+
+    /// <summary>
+    /// 回滚终点库位（预留/占用 → 空闲）并删除托盘记录，不动 queues 里的任务记录。
+    /// </summary>
+    private void RollbackDestination(string? locationCode, string? pallNo)
+    {
+        if (!string.IsNullOrEmpty(locationCode))
+        {
+            _db.Updateable<Location>()
+                .SetColumns(l => new Location
+                {
+                    Status = 0,
+                    PallNo = null,
+                    TotalWeight = null,
+                    UpdateTime = DateTime.Now
+                })
+                .Where(l => l.LocationCode == locationCode && l.Status != 0)
+                .ExecuteCommand();
+        }
+
+        if (!string.IsNullOrEmpty(pallNo))
+        {
+            _db.Deleteable<PallMater>()
+                .Where(p => p.PallNo == pallNo)
+                .ExecuteCommand();
+        }
+    }
+
+    /// <summary>
+    /// 按 ProcessDeliveryAsync 出库队列的模板记录一条入库队列任务，供下游 AGV 调度消费。
+    /// 返回队列的 TaskName，用作创建 AGV 任务时的 taskCode，便于回调反馈匹配本地任务。
+    /// </summary>
+    private string RecordInboundQueue(string pallNo, string? startPointReserve5, string locationCode)
+    {
+        var startLoc = string.IsNullOrWhiteSpace(startPointReserve5)
+            ? null
+            : _db.Queryable<Location>()
+                .Where(l => l.Reserve5 == startPointReserve5)
+                .First();
+
+        var queue = new Queues
+        {
+            TaskName = $"IN-{pallNo}",
+            PallNo = pallNo,
+            Type = "入库",
+            GetLocation = startLoc?.LocationCode ?? startPointReserve5 ?? "",
+            PutLocation = locationCode,
+            Status = "0",
+            CreateTime = DateTime.Now
+        };
+
+        _db.Insertable(queue).ExecuteCommand();
+        _logger.LogInformation("Inbound queue created: {TaskName}, from: {From}, to: {To}",
+            queue.TaskName, queue.GetLocation, queue.PutLocation);
+
+        return queue.TaskName!;
+    }
+
+    /// <summary>
+    /// 处理 AGV 回调：按 taskCode 匹配 queues 里的任务，根据 method 推进任务状态并同步库位状态。
+    /// 返回给 AGV 的 message。
+    /// </summary>
+    public string HandleAgvCallback(string method, string taskCode, string wbCode)
+    {
+        var queue = _db.Queryable<Queues>()
+            .Where(q => q.TaskName == taskCode)
+            .First();
+
+        if (queue == null)
+        {
+            _logger.LogWarning("AGV回调 未找到任务: TaskCode={TaskCode}, WbCode={WbCode}", taskCode, wbCode);
+            return "task not found";
+        }
+
+        switch (method.ToLowerInvariant())
+        {
+            case "start":
+                queue.Status = "1";
+                _db.Updateable(queue).UpdateColumns(q => q.Status).ExecuteCommand();
+                ReleaseLocationByCode(queue.GetLocation);
+                _logger.LogInformation("AGV任务开始: TaskCode={TaskCode}, 起点释放={GetLocation}", taskCode, queue.GetLocation);
+                break;
+
+            case "begin":
+                queue.Status = "2";
+                _db.Updateable(queue).UpdateColumns(q => q.Status).ExecuteCommand();
+                ReleaseLocationByCode(queue.GetLocation);
+                _logger.LogInformation("AGV任务执行中: TaskCode={TaskCode}, 起点释放={GetLocation}", taskCode, queue.GetLocation);
+                break;
+
+            case "end":
+                queue.Status = "3";
+                _db.Updateable(queue).UpdateColumns(q => q.Status).ExecuteCommand();
+                OccupyLocationByCode(queue.PutLocation);
+                _logger.LogInformation("AGV任务完成: TaskCode={TaskCode}, 终点占用={PutLocation}", taskCode, queue.PutLocation);
+                break;
+
+            case "cancel":
+                queue.Status = "4";
+                queue.Reserver3 = "任务取消";
+                _db.Updateable(queue).UpdateColumns(q => new { q.Status, q.Reserver3 }).ExecuteCommand();
+
+                // 任务取消：货未送达，回滚终点库位预留并清除托盘记录；队列保留 Status=4 作为取消凭证
+                RollbackDestination(queue.PutLocation, queue.PallNo);
+                _logger.LogInformation("AGV任务取消: TaskCode={TaskCode}, 已回滚终点 {PutLocation} 和托盘 {PallNo}",
+                    taskCode, queue.PutLocation, queue.PallNo);
+                break;
+
+            default:
+                _logger.LogWarning("AGV回调未知method: {Method}, TaskCode={TaskCode}", method, taskCode);
+                break;
+        }
+
+        return "success";
+    }
+
+    private void ReleaseLocationByCode(string? locationCode)
+    {
+        if (string.IsNullOrEmpty(locationCode)) return;
+        var rows = _db.Updateable<Location>()
             .SetColumns(l => new Location
             {
                 Status = 0,
@@ -260,12 +394,21 @@ public class LocationAllocationService
             })
             .Where(l => l.LocationCode == locationCode && l.Status == 1)
             .ExecuteCommand();
+        _logger.LogInformation("释放库位 {LocationCode}, 影响行数={Rows}", locationCode, rows);
+    }
 
-        _db.Deleteable<PallMater>()
-            .Where(p => p.PallNo == pallNo)
+    private void OccupyLocationByCode(string? locationCode)
+    {
+        if (string.IsNullOrEmpty(locationCode)) return;
+        var rows = _db.Updateable<Location>()
+            .SetColumns(l => new Location
+            {
+                Status = 1,
+                UpdateTime = DateTime.Now
+            })
+            .Where(l => l.LocationCode == locationCode && l.Status == 2)
             .ExecuteCommand();
-
-        _logger.LogWarning("AGV任务失败，已回滚库位 {Location} 和托盘 {PallNo}", locationCode, pallNo);
+        _logger.LogInformation("占用库位 {LocationCode}, 影响行数={Rows}", locationCode, rows);
     }
 
     public GroupLoadInfo GetGroupLoad(string shelfCode)
@@ -341,10 +484,11 @@ public class LocationAllocationService
 
     private decimal GetGroupCurrentWeight(List<string> shelfCodes, string tier)
     {
+        // Status != 0：已占用(1)和预留中(2)的托盘重量都要计入货架对限重
         var total = _db.Queryable<Location>()
             .Where(l => shelfCodes.Contains(l.ShelfCode))
             .Where(l => l.LocationType == tier)
-            .Where(l => l.Status == 1)
+            .Where(l => l.Status != 0)
             .Where(l => !SqlFunc.IsNullOrEmpty(l.PallNo))
             .Sum(l => l.TotalWeight ?? 0m);
 
@@ -353,10 +497,11 @@ public class LocationAllocationService
 
     private AllocationResult TryAllocate(Location location, string pallNo, decimal? weightKg)
     {
+        // Status 2 = 预留：分配时先占位，AGV 送达（end 回调）后才置为 1 正式占用
         var rows = _db.Updateable<Location>()
             .SetColumns(l => new Location
             {
-                Status = 1,
+                Status = 2,
                 PallNo = pallNo,
                 TotalWeight = weightKg,
                 UpdateTime = DateTime.Now
