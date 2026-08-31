@@ -65,6 +65,8 @@ public class LocationAllocationService
 
     public async Task<AllocationResult> Allocate(AllocationRequest request)
     {
+        string barMsg = "";
+
         if (string.IsNullOrWhiteSpace(request.StartPoint))
             return Fail("起点不能为空");
 
@@ -83,6 +85,10 @@ public class LocationAllocationService
             {
                 syncedBarcodes.Add(result);
                 totalWeight += result.AuxQty ?? 0;
+            }
+            else
+            {
+                barMsg += $"物料编码： {code} 未能在WMS中找到物料信息，上架会排除";
             }
         }
 
@@ -145,12 +151,20 @@ public class LocationAllocationService
             _logger.LogInformation("PallMater created: {PallNo}, weight: {Weight}", pallMater.PallNo, totalWeight);
         }
 
+        if (!string.IsNullOrWhiteSpace(barMsg))
+        {
+            allocationResult.Message += barMsg;
+        }
+
+
         return allocationResult;
     }
 
     public async Task<AllocationResult> AllocateToSpecific(string locationCode, AllocationRequest request)
     {
-        //var pallNo = GeneratePallNo();
+        string barMsg = ""; 
+        
+        var pallNo = GeneratePallNo();
 
         var loc = _db.Queryable<Location>()
             .First(l => l.Reserve5 == locationCode);
@@ -181,6 +195,10 @@ public class LocationAllocationService
                     syncedBarcodes.Add(wmsResult);
                     totalWeight += wmsResult.Qty;
                 }
+                else
+                {
+                    barMsg += $"物料编码： {code} 未能在WMS中找到物料信息，上架会排除";
+                }
             }
 
             if (totalWeight == 0)
@@ -188,7 +206,7 @@ public class LocationAllocationService
 
             var pallMater = new PallMater
             {
-                PallNo = GeneratePallNo(),
+                PallNo = pallNo,
                 Weight = totalWeight,
                 LocationCode = loc.LocationCode,
                 ShelfCode = request.StartPoint,
@@ -214,33 +232,38 @@ public class LocationAllocationService
                 return Fail("所在货架对已超重限制");
 
             // 与 Allocate 保持一致：库位分配成功后才落库 PallMater，避免失败路径留下孤儿记录
-            var allocationResult = TryAllocate(loc, pallMater.PallNo, totalWeight);
+            var allocationResult = TryAllocate(loc, pallNo, totalWeight);
             if (!allocationResult.Success)
                 return allocationResult;
 
             _db.Insertable(pallMater).ExecuteCommand();
-            allocationResult.TaskName = RecordInboundQueue(pallMater.PallNo, request.StartPoint, loc.LocationCode);
+            allocationResult.TaskName = RecordInboundQueue(pallNo, request.StartPoint, loc.LocationCode);
             _logger.LogInformation("PallMater created: {PallNo}, weight: {Weight}, from: {Start}, to: {End}",
-                pallMater.PallNo, totalWeight, request.StartPoint, locationCode);
+                pallNo, totalWeight, request.StartPoint, locationCode);
+
+            if(!string.IsNullOrWhiteSpace(barMsg))
+            {
+                allocationResult.Message += barMsg;
+            }
 
             return allocationResult;
         }
         else
         {
-            var startPosition = _db.Queryable<Location>().First(l => l.Reserve5 == request.StartPoint);
+            //var startPosition = _db.Queryable<Location>().First(l => l.Reserve5 == request.StartPoint);
 
-            if (startPosition == null || string.IsNullOrWhiteSpace(startPosition.LocationCode))
-            {
-                return Fail("未找到起始库位信息");
-            }
+            //if (startPosition == null || string.IsNullOrWhiteSpace(startPosition.LocationCode))
+            //{
+            //    return Fail("未找到起始库位信息");
+            //}
 
             decimal totalWeight = 0;
             _logger.LogInformation("Outlocate {PallNo}, weight: {Weight}, from: {Start}, to: {End}",
-                startPosition.PallNo, totalWeight, request.StartPoint, locationCode);
+                pallNo, totalWeight, request.StartPoint, locationCode);
 
-            var allocationResult = TryAllocate(loc, startPosition.PallNo!, totalWeight);
+            var allocationResult = TryAllocate(loc, pallNo!, totalWeight);
             if (allocationResult.Success)
-                allocationResult.TaskName = $"OUT-{startPosition.PallNo}";
+                allocationResult.TaskName = $"OUT-{pallNo}";
             return allocationResult;
         }
     }
