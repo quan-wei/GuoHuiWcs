@@ -1,4 +1,4 @@
-﻿using Guohui_Wcs.Models;
+using Guohui_Wcs.Models;
 using Models;
 using SqlSugar;
 using System.Linq.Expressions;
@@ -68,7 +68,7 @@ public class LocationAllocationService
         if (string.IsNullOrWhiteSpace(request.StartPoint))
             return Fail("起点不能为空");
 
-        var pallNo = GeneratePallNo();
+        //var pallNo = GeneratePallNo();
 
         if (request.MaterNo == null || request.MaterNo.Count == 0)
             return Fail("物料号不能为空");
@@ -89,7 +89,7 @@ public class LocationAllocationService
         // 插入 PallMater 记录
         var pallMater = new PallMater
         {
-            PallNo = pallNo,
+            PallNo = GeneratePallNo(),
             Weight = totalWeight,
             CreateTime = DateTime.Now
         };
@@ -120,7 +120,7 @@ public class LocationAllocationService
 
         var level1 = FindFreeLocation(l => l.LocationType == "一层货架", null);
         if (level1 != null)
-            allocationResult = TryAllocate(level1, pallNo, totalWeight);
+            allocationResult = TryAllocate(level1, pallMater.PallNo, totalWeight);
 
         if (allocationResult == null && request.AllowUpperLevels)
         {
@@ -129,7 +129,7 @@ public class LocationAllocationService
                 var loc = FindUpperLevel(tier, null, totalWeight);
                 if (loc != null)
                 {
-                    allocationResult = TryAllocate(loc, pallNo, totalWeight);
+                    allocationResult = TryAllocate(loc, pallMater.PallNo, totalWeight);
                     break;
                 }
             }
@@ -141,16 +141,16 @@ public class LocationAllocationService
         if (allocationResult.Success)
         {
             _db.Insertable(pallMater).ExecuteCommand();
-            allocationResult.TaskName = RecordInboundQueue(pallNo, request.StartPoint, allocationResult.LocationCode!);
-            _logger.LogInformation("PallMater created: {PallNo}, weight: {Weight}", pallNo, totalWeight);
+            allocationResult.TaskName = RecordInboundQueue(pallMater.PallNo, request.StartPoint, allocationResult.LocationCode!);
+            _logger.LogInformation("PallMater created: {PallNo}, weight: {Weight}", pallMater.PallNo, totalWeight);
         }
 
         return allocationResult;
     }
 
-   public async Task<AllocationResult> AllocateToSpecific(string locationCode, AllocationRequest request)
-   {
-        var pallNo = GeneratePallNo();
+    public async Task<AllocationResult> AllocateToSpecific(string locationCode, AllocationRequest request)
+    {
+        //var pallNo = GeneratePallNo();
 
         var loc = _db.Queryable<Location>()
             .First(l => l.Reserve5 == locationCode);
@@ -188,7 +188,7 @@ public class LocationAllocationService
 
             var pallMater = new PallMater
             {
-                PallNo = pallNo,
+                PallNo = GeneratePallNo(),
                 Weight = totalWeight,
                 LocationCode = loc.LocationCode,
                 ShelfCode = request.StartPoint,
@@ -214,26 +214,33 @@ public class LocationAllocationService
                 return Fail("所在货架对已超重限制");
 
             // 与 Allocate 保持一致：库位分配成功后才落库 PallMater，避免失败路径留下孤儿记录
-            var allocationResult = TryAllocate(loc, pallNo, totalWeight);
+            var allocationResult = TryAllocate(loc, pallMater.PallNo, totalWeight);
             if (!allocationResult.Success)
                 return allocationResult;
 
             _db.Insertable(pallMater).ExecuteCommand();
-            allocationResult.TaskName = RecordInboundQueue(pallNo, request.StartPoint, loc.LocationCode);
+            allocationResult.TaskName = RecordInboundQueue(pallMater.PallNo, request.StartPoint, loc.LocationCode);
             _logger.LogInformation("PallMater created: {PallNo}, weight: {Weight}, from: {Start}, to: {End}",
-                pallNo, totalWeight, request.StartPoint, locationCode);
+                pallMater.PallNo, totalWeight, request.StartPoint, locationCode);
 
             return allocationResult;
         }
         else
         {
+            var startPosition = _db.Queryable<Location>().First(l => l.Reserve5 == request.StartPoint);
+
+            if (startPosition == null || string.IsNullOrWhiteSpace(startPosition.LocationCode))
+            {
+                return Fail("未找到起始库位信息");
+            }
+
             decimal totalWeight = 0;
             _logger.LogInformation("Outlocate {PallNo}, weight: {Weight}, from: {Start}, to: {End}",
-                pallNo, totalWeight, request.StartPoint, locationCode);
+                startPosition.PallNo, totalWeight, request.StartPoint, locationCode);
 
-            var allocationResult = TryAllocate(loc, pallNo, totalWeight);
+            var allocationResult = TryAllocate(loc, startPosition.PallNo!, totalWeight);
             if (allocationResult.Success)
-                allocationResult.TaskName = $"OUT-{pallNo}";
+                allocationResult.TaskName = $"OUT-{startPosition.PallNo}";
             return allocationResult;
         }
     }
