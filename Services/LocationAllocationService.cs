@@ -264,7 +264,7 @@ public class LocationAllocationService
             var allocationResult = TryAllocate(loc, pallNo!, totalWeight);
             if (allocationResult.Success)
                 allocationResult.TaskName = $"OUT-{pallNo}";
-            allocationResult.TaskName = RecordInboundQueue("OUT", pallNo, request.StartPoint, locationCode);
+            allocationResult.TaskName = RecordInboundQueue("OUT", pallNo, request.StartPoint, loc.LocationCode);
             return allocationResult;
         }
     }

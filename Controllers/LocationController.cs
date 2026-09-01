@@ -152,19 +152,6 @@ public class LocationController : ControllerBase
         var result = await _deliveryService.ProcessDeliveryAsync(number);
         if (!result.Success)
             return BadRequest(result);
-
-        var loc = Model_Data.Db.Queryable<Location>().Where(t => t.Reserve5!.StartsWith('G') && t.Status == 0 && t.EnableFlag == true).ToList();
-
-        if (loc == null || loc.Count == 0)
-        {
-            return BadRequest(new DeliveryProcessResult { Success = false, Message = "没有空闲的地面库位" });
-        }
-
-        if (result.Tasks.Count > loc.Count)
-        {
-            result.Message += "空闲地面库位不足，只会下架部分物料，请注意";
-        }
-
         return Ok(result);
     }
 
