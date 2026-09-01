@@ -4,6 +4,7 @@ using Guohui_Wcs.Services;
 using Guohui_Wcs.Utils.AGVUtils;
 using Microsoft.AspNetCore.Mvc;
 using Models;
+using NetTaste;
 
 namespace Guohui_Wcs.Controllers;
 
@@ -149,6 +150,19 @@ public class LocationController : ControllerBase
         var result = await _deliveryService.ProcessDeliveryAsync(number);
         if (!result.Success)
             return BadRequest(result);
+
+        var loc = Model_Data.Db.Queryable<Location>().Where(t => t.Reserve5!.StartsWith('G') && t.Status == 0 && t.EnableFlag == true).ToList();
+
+        if (loc == null || loc.Count == 0)
+        {
+            return BadRequest(new DeliveryProcessResult { Success = false, Message = "没有空闲的地面库位" });
+        }
+
+        if (result.Tasks.Count > loc.Count)
+        {
+            result.Message += "空闲地面库位不足，只会下架部分物料，请注意";
+        }
+
         return Ok(result);
     }
 
@@ -175,18 +189,10 @@ public class LocationController : ControllerBase
                         errorMsg += $"AGV搬运任务创建失败: {errMsg}";
                     }
 
-                    //var rRows = Model_Data.Db.Updateable<Location>()
-                    //    .SetColumns(l => new Location
-                    //    {
-                    //        Status = 0,
-                    //        UpdateTime = DateTime.Now
-                    //    })
-                    //    .Where(l => l.LocationCode == item.GetLocation)
-                    //    .ExecuteCommand();
                     var lRows = Model_Data.Db.Updateable<Location>()
                         .SetColumns(l => new Location
                         {
-                            Status = 1,
+                            Status = 2,
                             UpdateTime = DateTime.Now
                         })
                         .Where(l => l.LocationCode == item.PutLocation)
