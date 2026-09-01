@@ -1,7 +1,6 @@
-
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.14.37216.2
+# Visual Studio Version 18
+VisualStudioVersion = 18.9.12112.369 stable
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Guohui_Wcs", "Guohui_Wcs.csproj", "{DD1A030C-24FE-47F8-BEA9-536842B9FA3C}"
 EndProject

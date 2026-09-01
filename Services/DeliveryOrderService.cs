@@ -46,11 +46,11 @@ public class DeliveryOrderService
     public async Task<DeliveryProcessResult> ProcessDeliveryAsync(string deliveryNo)
     {
         // 1. 从金蝶获取出库通知单
-        //var response = await _kingdeeApi.ViewAsync<KingdeeDeliveryNotice>("SAL_DELIVERYNOTICE", deliveryNo);
-        //if (response == null || !response.Result.ResponseStatus.IsSuccess)
-        //    return new DeliveryProcessResult { Success = false, Message = "金蝶查询失败，请检查单据号或登录配置" };
-        var json = File.ReadAllText("D:\\code\\国辉仓控\\64dc9982-2f88-4b57-b289-19cb7bae6e7a.json");
-        var response = JsonConvert.DeserializeObject<KingdeeViewResponse<KingdeeDeliveryNotice>>(json);
+        var response = await _kingdeeApi.ViewAsync<KingdeeDeliveryNotice>("SAL_DELIVERYNOTICE", deliveryNo);
+        if (response == null || !response.Result.ResponseStatus.IsSuccess)
+            return new DeliveryProcessResult { Success = false, Message = "金蝶查询失败，请检查单据号或登录配置" };
+        //var json = File.ReadAllText("D:\\code\\国辉仓控\\64dc9982-2f88-4b57-b289-19cb7bae6e7a.json");
+        //var response = JsonConvert.DeserializeObject<KingdeeViewResponse<KingdeeDeliveryNotice>>(json);
 
         var notice = response.Result.Data!;
         if (notice.Entries == null || notice.Entries.Count == 0)
@@ -230,10 +230,12 @@ public class DeliveryOrderService
 
             for (var i = 0; i < (infos.Count > loc.Count ? loc.Count : infos.Count); i++)
             {
+                var pallNo = GeneratePallNo();
+
                 var queue = new Queues
                 {
                     TaskName = infos[i].TaskName,
-                    PallNo = infos[i].PallNo,
+                    PallNo = pallNo,
                     Type = "出库",
                     GetLocation = infos[i].LocationCode ?? "",
                     PutLocation = loc[i].LocationCode,
@@ -247,6 +249,48 @@ public class DeliveryOrderService
             }
         }
         return createdTasks;
+    }
+
+    private string GeneratePallNo()
+    {
+        var today = DateTime.Now.ToString("yyyyMMdd");
+        var sequence = IncrementSequence(today);
+        return $"PALL{today}{sequence:D4}";
+    }
+
+    /// <summary>
+    /// 原子递增当日序号并返回新值，避免"先查后改"在并发下生成重复的 PallNo。
+    /// </summary>
+    private int IncrementSequence(string today)
+    {
+        const string updateSql = """
+            UPDATE serialsequence
+            SET CurrentSequence = ISNULL(CurrentSequence, 0) + 1
+            OUTPUT inserted.CurrentSequence
+            WHERE SerialDate = @date
+            """;
+
+        var updated = _db.Ado.SqlQuery<int>(updateSql, new SugarParameter("@date", today));
+        if (updated.Count > 0)
+            return updated[0];
+
+        try
+        {
+            _db.Insertable(new SerialSequence
+            {
+                SerialDate = today,
+                CurrentSequence = 1
+            }).ExecuteCommand();
+            return 1;
+        }
+        catch
+        {
+            // 当日记录已被并发请求插入，主键冲突，重走递增取号
+            var retried = _db.Ado.SqlQuery<int>(updateSql, new SugarParameter("@date", today));
+            if (retried.Count > 0)
+                return retried[0];
+            throw;
+        }
     }
 }
 

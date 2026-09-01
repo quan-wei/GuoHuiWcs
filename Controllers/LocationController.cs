@@ -1,3 +1,4 @@
+using Azure.Core;
 using GuoHui_Data.DaoEntity;
 using Guohui_Wcs.Models.Kingdee;
 using Guohui_Wcs.Services;
@@ -5,6 +6,7 @@ using Guohui_Wcs.Utils.AGVUtils;
 using Microsoft.AspNetCore.Mvc;
 using Models;
 using NetTaste;
+using SqlSugar;
 
 namespace Guohui_Wcs.Controllers;
 
@@ -193,10 +195,14 @@ public class LocationController : ControllerBase
                         .SetColumns(l => new Location
                         {
                             Status = 2,
+                            PallNo = item.PallNo,
+                            TotalWeight = 0,
                             UpdateTime = DateTime.Now
                         })
                         .Where(l => l.LocationCode == item.PutLocation)
                         .ExecuteCommand();
+
+                    _logger.LogInformation("托盘 {PallNo} ({WeightKg}kg) 已分配至 {Location} ({Type})", item.PallNo, 0, item.PutLocation, "地面库位");
                 }
             }
             return Ok(new AllocationResult { Success = true, Message = !string.IsNullOrWhiteSpace(errorMsg) ? errorMsg : "任务执行成功" });

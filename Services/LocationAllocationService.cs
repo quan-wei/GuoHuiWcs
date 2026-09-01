@@ -147,7 +147,7 @@ public class LocationAllocationService
         if (allocationResult.Success)
         {
             _db.Insertable(pallMater).ExecuteCommand();
-            allocationResult.TaskName = RecordInboundQueue(pallMater.PallNo, request.StartPoint, allocationResult.LocationCode!);
+            allocationResult.TaskName = RecordInboundQueue("IN", pallMater.PallNo, request.StartPoint, allocationResult.LocationCode!);
             _logger.LogInformation("PallMater created: {PallNo}, weight: {Weight}", pallMater.PallNo, totalWeight);
         }
 
@@ -162,8 +162,8 @@ public class LocationAllocationService
 
     public async Task<AllocationResult> AllocateToSpecific(string locationCode, AllocationRequest request)
     {
-        string barMsg = ""; 
-        
+        string barMsg = "";
+
         var pallNo = GeneratePallNo();
 
         var loc = _db.Queryable<Location>()
@@ -237,11 +237,11 @@ public class LocationAllocationService
                 return allocationResult;
 
             _db.Insertable(pallMater).ExecuteCommand();
-            allocationResult.TaskName = RecordInboundQueue(pallNo, request.StartPoint, loc.LocationCode);
+            allocationResult.TaskName = RecordInboundQueue("IN", pallNo, request.StartPoint, loc.LocationCode);
             _logger.LogInformation("PallMater created: {PallNo}, weight: {Weight}, from: {Start}, to: {End}",
                 pallNo, totalWeight, request.StartPoint, locationCode);
 
-            if(!string.IsNullOrWhiteSpace(barMsg))
+            if (!string.IsNullOrWhiteSpace(barMsg))
             {
                 allocationResult.Message += barMsg;
             }
@@ -264,6 +264,7 @@ public class LocationAllocationService
             var allocationResult = TryAllocate(loc, pallNo!, totalWeight);
             if (allocationResult.Success)
                 allocationResult.TaskName = $"OUT-{pallNo}";
+            allocationResult.TaskName = RecordInboundQueue("OUT", pallNo, request.StartPoint, locationCode);
             return allocationResult;
         }
     }
@@ -327,7 +328,7 @@ public class LocationAllocationService
     /// 按 ProcessDeliveryAsync 出库队列的模板记录一条入库队列任务，供下游 AGV 调度消费。
     /// 返回队列的 TaskName，用作创建 AGV 任务时的 taskCode，便于回调反馈匹配本地任务。
     /// </summary>
-    private string RecordInboundQueue(string pallNo, string? startPointReserve5, string locationCode)
+    private string RecordInboundQueue(string taskType, string pallNo, string? startPointReserve5, string locationCode)
     {
         var startLoc = string.IsNullOrWhiteSpace(startPointReserve5)
             ? null
@@ -337,9 +338,9 @@ public class LocationAllocationService
 
         var queue = new Queues
         {
-            TaskName = $"IN-{pallNo}",
+            TaskName = $"{taskType}-{pallNo}",
             PallNo = pallNo,
-            Type = "入库",
+            Type = taskType == "IN" ? "入库" : "出库",
             GetLocation = startLoc?.LocationCode ?? startPointReserve5 ?? "",
             PutLocation = locationCode,
             Status = "0",
